@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+
+commit_msg=$(cat "$1")
+
+# Allowed format: <type>(<scope>): <description>
+# scope is optional, description must be non-empty
+pattern="^(feat|fix|docs|refactor|test|chore)(\(.+\))?: .+"
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+  echo ""
+  echo "  Invalid commit message format."
+  echo ""
+  echo "  Expected: <type>(<scope>): <description>"
+  echo "  Example:  feat(auth): add JWT refresh token"
+  echo ""
+  echo "  Allowed types: feat, fix, docs, refactor, test, chore"
+  echo "  Scope is optional. Description must not be empty."
+  echo ""
+  exit 1
+fi

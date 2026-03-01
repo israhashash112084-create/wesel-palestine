@@ -1,0 +1,47 @@
+# ─── Kebab-case file/folder name validation ───────────────────────────────────
+# Checks staged file and folder names; skips hidden entries (starting with .)
+staged_files=$(git diff --cached --name-only)
+invalid=""
+
+for filepath in $staged_files; do
+  # Skip auto-generated migration files (timestamps + underscores are expected)
+  case "$filepath" in
+    src/database/migrations/*) continue ;;
+  esac
+
+  # Skip well-known uppercase markdown files (README.md, CHANGELOG.md, LICENSE, etc.)
+  basename=$(echo "$filepath" | sed 's|.*/||')
+  case "$basename" in
+    README.md|CHANGELOG.md|CONTRIBUTING.md|LICENSE|LICENSE.md) continue ;;
+  esac
+
+  while IFS= read -r part; do
+    # Skip hidden names like .husky, .env, .gitignore
+    case "$part" in
+      .*) continue ;;
+    esac
+    # Allow: lowercase letters, digits, hyphens, dots
+    # Valid: auth.controller.js | async-handler.js | v1
+    if ! echo "$part" | grep -qE "^[a-z0-9][a-z0-9.-]*$"; then
+      invalid="$invalid\n    $filepath  (bad segment: '$part')"
+    fi
+  done <<SPLIT
+$(echo "$filepath" | tr '/' '\n')
+SPLIT
+done
+
+if [ -n "$invalid" ]; then
+  echo ""
+  echo "  Naming convention error: file and folder names must be kebab-case."
+  printf "  Offending paths:%b\n" "$invalid"
+  echo ""
+  echo "  Rules : lowercase letters, digits, hyphens and dots only."
+  echo "  Good  : auth.controller.js | incidents-service.js | async-handler.js"
+  echo "  Bad   : AuthController.js  | incidents_service.js | asyncHandler.js"
+  echo ""
+  exit 1
+fi
+# ──────────────────────────────────────────────────────────────────────────────
+
+npm run lint
+npx lint-staged
