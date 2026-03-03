@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  @@map("users")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String   @unique
+  passwordHash  String   @db.VarChar(255) @map("password_hash")
+  firstName String   @db.VarChar(50) @map("first_name")
+  lastName  String   @db.VarChar(50) @map("last_name")
+  role      Role     @default(user)
+  confidenceScore Float    @default(0.0) @map("confidence_score")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  checkpoints Checkpoints[]
+}
+
+enum Role {
+  user
+  moderator
+  admin
+}
+
+model Checkpoints {
+  @@map("checkpoints")
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(100)
+  areaName   String    @db.VarChar(100) @map("area_name")
+  description String?  @db.Text
+  latitude    Decimal    @db.Decimal(10, 6)
+  longitude   Decimal    @db.Decimal(10, 6)
+  status     CheckpointStatus @default(open)
+  createdBy   String   @db.Uuid @map("created_by")
+  user       User     @relation(fields: [createdBy], references: [id])
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+}
+
+enum CheckpointStatus {
+  open
+  closed
+  slow
+  unknown
+}
