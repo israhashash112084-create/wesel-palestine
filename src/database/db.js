@@ -9,15 +9,15 @@ export const pool = new Pool({
   user: env.DB_USER,
   password: env.DB_PASSWORD,
   database: env.DB_NAME,
-  ssl: env.DB_SSL === 'true',
-  max: env.DB_POOL_MAX ? Number(env.DB_POOL_MAX) : undefined,
+  ssl: env.DB_SSL,
+  max: env.DB_POOL_MAX,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });
 
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  process.exit(1);
 });
 
 export const query = (text, params) => pool.query(text, params);
