@@ -16,22 +16,22 @@ datasource db {
 
 model User {
   @@map("users")
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email     String   @unique
-  password  String   @db.VarChar(255)
+  passwordHash  String   @db.VarChar(255) @map("password_hash")
   firstName String   @db.VarChar(50) @map("first_name")
   lastName  String   @db.VarChar(50) @map("last_name")
-  role      Role     @default(USER)
-  confidanceScore Float    @default(0.0) @map("confidance_score")
+  role      Role     @default(user)
+  confidenceScore Float    @default(0.0) @map("confidence_score")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   checkpoints Checkpoints[]
 }
 
 enum Role {
-  USER
-  MODERATOR
-  ADMIN
+  user
+  moderator
+  admin
 }
 
 model Checkpoints {
@@ -42,7 +42,7 @@ model Checkpoints {
   description String?  @db.Text
   latitude    Decimal    @db.Decimal(10, 6)
   longitude   Decimal    @db.Decimal(10, 6)
-  status     CheckpointStatus @default(OPEN)
+  status     CheckpointStatus @default(open)
   createdBy   String   @db.Uuid @map("created_by")
   user       User     @relation(fields: [createdBy], references: [id])
   
@@ -51,8 +51,8 @@ model Checkpoints {
 }
 
 enum CheckpointStatus {
-  OPEN
-  CLOSED
-  SLOW
-  UNKNOWN
+  open
+  closed
+  slow
+  unknown
 }

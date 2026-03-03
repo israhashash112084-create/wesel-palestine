@@ -4,13 +4,13 @@ const { Pool } = pg;
 
 // Create a connection pool using the direct URL (bypassing pgBouncer)
 export const pool = new Pool({
-  host: env.DATABASE_HOST,
-  port: env.DATABASE_PORT,
-  user: env.DATABASE_USER,
-  password: env.DATABASE_PASSWORD,
-  database: env.DATABASE_NAME,
-  ssl: env.DATABASE_SSL === 'true',
-  max: env.DATABASE_MAX_CLIENTS,
+  host: env.DB_HOST,
+  port: env.DB_PORT,
+  user: env.DB_USER,
+  password: env.DB_PASSWORD,
+  database: env.DB_NAME,
+  ssl: env.DB_SSL === 'true',
+  max: env.DB_POOL_MAX ? Number(env.DB_POOL_MAX) : undefined,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });
