@@ -24,7 +24,7 @@ model User {
   role      Role     @default(user)
   confidenceScore Float    @default(0.0) @map("confidence_score")
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime? @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
   checkpoints Checkpoints[]
   refreshTokens RefreshToken[]
 }
@@ -48,7 +48,7 @@ model Checkpoints {
   user       User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   
   createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime? @updatedAt @map("updated_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 }
 
 enum CheckpointStatus {
@@ -66,4 +66,6 @@ model RefreshToken {
   expiresAt DateTime @map("expires_at")
   
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
 }
