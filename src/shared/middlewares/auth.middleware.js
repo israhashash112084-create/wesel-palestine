@@ -1,6 +1,6 @@
 import { env } from '#config/env.js';
 import jwt from 'jsonwebtoken';
-import { UnauthorizedError } from '#shared/urils/error.js';
+import { UnauthorizedError } from '#shared/utils/errors.js';
 
 /**
  * Reads the access token from the HttpOnly cookie and attaches
@@ -10,11 +10,12 @@ import { UnauthorizedError } from '#shared/urils/error.js';
  */
 
 export const authenticate = (req, res, next) => {
-  const token = req.cookies?.token;
+  const authHeader = req.headers?.authorization ?? req.headers?.Authorization;
 
-  if (!token) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new UnauthorizedError('No authentication token provided');
   }
+  const token = authHeader.split(' ')[1];
 
   // jwt.verify throws TokenExpiredError / JsonWebTokenError on failure;
   // the global error handler normalizes these into 401 responses.
