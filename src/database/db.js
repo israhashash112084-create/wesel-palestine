@@ -9,10 +9,10 @@ export const pool = new Pool({
   user: env.DB_USER,
   password: env.DB_PASSWORD,
   database: env.DB_NAME,
-  ssl: env.DB_SSL,
+  ssl: env.DB_SSL ? { rejectUnauthorized: false } : false,
   max: env.DB_POOL_MAX,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000,
 });
 
 pool.on('error', (err) => {

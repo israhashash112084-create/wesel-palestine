@@ -7,6 +7,13 @@ export class AppError extends Error {
   }
 }
 
+/** 400 Validation Error */
+export class ValidationError extends AppError {
+  constructor(message = 'Validation Error') {
+    super(message, 400);
+  }
+}
+
 /** 400 Bad Request */
 export class BadRequestError extends AppError {
   constructor(message = 'Bad Request') {
