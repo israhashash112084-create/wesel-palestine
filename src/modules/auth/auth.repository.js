@@ -1,4 +1,6 @@
 import { query } from '#database/db.js';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 /**
  * Auth repository — handles all auth-related DB queries.
@@ -10,11 +12,10 @@ export class AuthRepository {
    * @param {string} email
    */
   async findByEmail(email) {
-    const result = await query(
-      'SELECT id, email, password_hash, role FROM users WHERE email = $1 LIMIT 1',
-      [email]
-    );
-    return result.rows[0] ?? null;
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+    return user ?? null;
   }
 
   /**
@@ -22,22 +23,31 @@ export class AuthRepository {
    * @param {string} id
    */
   async findById(id) {
-    const result = await query('SELECT id, email, role FROM users WHERE id = $1 LIMIT 1', [id]);
-    return result.rows[0] ?? null;
+    const user = await prisma.user.findUnique({
+      where: { id },
+    });
+    return user ?? null;
   }
 
   /**
    * Create a new user.
-   * @param {{ email: string, passwordHash: string, role?: string }} data
-   * @param {{ trx?: import('pg').PoolClient }} options - Optional transaction client.
+   * @param {{ firstName: string, lastName: string, email: string, passwordHash: string, role?: string }} data
    */
-  async create({ email, passwordHash, role = 'user' }, { trx } = {}) {
-    const client = trx ?? { query: (text, params) => query(text, params) };
-    const result = await client.query(
-      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role',
-      [email, passwordHash, role]
-    );
-    return result.rows[0];
+  async create({ firstName, lastName, email, passwordHash }) {
+    const user = await prisma.user.create({
+      data: {
+        firstName,
+        lastName,
+        email,
+        passwordHash,
+      },
+      select: {
+        id: true,
+        email: true,
+      },
+    });
+
+    return user;
   }
 
   /**
@@ -45,14 +55,15 @@ export class AuthRepository {
    * @param {string} userId
    * @param {string} tokenHash
    * @param {Date} expiresAt
-   * @param {{ trx?: import('pg').PoolClient }} options
    */
-  async saveRefreshToken(userId, tokenHash, expiresAt, { trx } = {}) {
-    const client = trx ?? { query: (text, params) => query(text, params) };
-    await client.query(
-      'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
-      [userId, tokenHash, expiresAt]
-    );
+  async saveRefreshToken(userId, tokenHash, expiresAt) {
+    await prisma.refreshToken.create({
+      data: {
+        userId,
+        tokenHash,
+        expiresAt,
+      },
+    });
   }
 
   /**
