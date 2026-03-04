@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { config } from '#config/env.js';
+import { env } from '#config/env.js';
 import { ConflictError, UnauthorizedError } from '#shared/utils/errors.js';
 
 const BCRYPT_ROUNDS = 12;
@@ -22,18 +22,18 @@ export class AuthService {
 
   /**
    * Register a new user.
-   * @param {{ email: string, password: string }} data
+   * @param {{ firstName: string, lastName: string, email: string, password: string }} data
    */
-  async register({ email, password }) {
+  async register({ firstName, lastName, email, password }) {
     const existing = await this.authRepository.findByEmail(email);
     if (existing) {
       throw new ConflictError('Email already in use');
     }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    const user = await this.authRepository.create({ email, passwordHash });
+    const user = await this.authRepository.create({ firstName, lastName, email, passwordHash });
 
-    return { user };
+    return user;
   }
 
   /**
@@ -46,7 +46,7 @@ export class AuthService {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
     if (!passwordMatch) {
       throw new UnauthorizedError('Invalid credentials');
     }
@@ -60,20 +60,20 @@ export class AuthService {
    * @param {string} incomingRefreshToken
    */
   async refresh(incomingRefreshToken) {
-    const tokenHash = hashToken(incomingRefreshToken);
-    const storedToken = await this.authRepository.findRefreshToken(tokenHash);
+    const refreshTokenHash = hashToken(incomingRefreshToken);
+    const storedTokenHash = await this.authRepository.findRefreshToken(refreshTokenHash);
 
-    if (!storedToken) {
+    if (!storedTokenHash) {
       throw new UnauthorizedError('Invalid or expired refresh token');
     }
 
     // Verify the JWT signature
     let decoded;
     try {
-      decoded = jwt.verify(incomingRefreshToken, config.jwt.refreshSecret);
+      decoded = jwt.verify(incomingRefreshToken, env.JWT_REFRESH_SECRET);
     } catch {
       // Token tampered or expired — delete the DB record and reject
-      await this.authRepository.deleteRefreshToken(tokenHash);
+      await this.authRepository.deleteRefreshToken(refreshTokenHash);
       throw new UnauthorizedError('Invalid or expired refresh token');
     }
 
@@ -83,7 +83,7 @@ export class AuthService {
     }
 
     // Rotate: delete old, issue new
-    await this.authRepository.deleteRefreshToken(tokenHash);
+    await this.authRepository.deleteRefreshToken(refreshTokenHash);
     const { accessToken, refreshToken: newRefreshToken } = await this._issueTokens(user);
 
     return { accessToken, refreshToken: newRefreshToken };
@@ -94,8 +94,8 @@ export class AuthService {
    * @param {string} refreshToken
    */
   async logout(refreshToken) {
-    const tokenHash = hashToken(refreshToken);
-    await this.authRepository.deleteRefreshToken(tokenHash);
+    const refreshTokenHash = hashToken(refreshToken);
+    await this.authRepository.deleteRefreshToken(refreshTokenHash);
   }
 
   /**
@@ -105,18 +105,18 @@ export class AuthService {
   async _issueTokens(user) {
     const payload = { id: user.id, email: user.email, role: user.role };
 
-    const accessToken = jwt.sign(payload, config.jwt.accessSecret, {
-      expiresIn: config.jwt.accessExpiresIn,
+    const accessToken = jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+      expiresIn: env.JWT_ACCESS_EXPIRES_IN,
     });
 
-    const refreshToken = jwt.sign(payload, config.jwt.refreshSecret, {
-      expiresIn: config.jwt.refreshExpiresIn,
+    const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, {
+      expiresIn: env.JWT_REFRESH_EXPIRES_IN,
     });
 
-    const tokenHash = hashToken(refreshToken);
+    const refreshTokenHash = hashToken(refreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    await this.authRepository.saveRefreshToken(user.id, tokenHash, expiresAt);
+    await this.authRepository.saveRefreshToken(user.id, refreshTokenHash, expiresAt);
 
     return { accessToken, refreshToken };
   }
