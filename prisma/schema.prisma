@@ -24,8 +24,9 @@ model User {
   role      Role     @default(user)
   confidenceScore Float    @default(0.0) @map("confidence_score")
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
   checkpoints Checkpoints[]
+  refreshTokens RefreshToken[]
 }
 
 enum Role {
@@ -38,16 +39,16 @@ model Checkpoints {
   @@map("checkpoints")
   id          Int      @id @default(autoincrement())
   name        String   @db.VarChar(100)
-  areaName   String    @db.VarChar(100) @map("area_name")
+  areaName   String?    @db.VarChar(100) @map("area_name")
   description String?  @db.Text
   latitude    Decimal    @db.Decimal(10, 6)
   longitude   Decimal    @db.Decimal(10, 6)
   status     CheckpointStatus @default(open)
-  createdBy   String   @db.Uuid @map("created_by")
-  user       User     @relation(fields: [createdBy], references: [id])
+  createdBy   String?   @db.Uuid @map("created_by")
+  user       User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   
   createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
 }
 
 enum CheckpointStatus {
@@ -55,4 +56,14 @@ enum CheckpointStatus {
   closed
   slow
   unknown
+}
+
+model RefreshToken {
+  @@map("refresh_tokens")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid @map("user_id")
+  tokenHash String   @db.VarChar(255) @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
