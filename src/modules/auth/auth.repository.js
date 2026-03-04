@@ -1,6 +1,4 @@
-import { query } from '#database/db.js';
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { query, prisma } from '#database/db.js';
 
 /**
  * Auth repository — handles all auth-related DB queries.
@@ -44,6 +42,7 @@ export class AuthRepository {
       select: {
         id: true,
         email: true,
+        role: true,
       },
     });
 

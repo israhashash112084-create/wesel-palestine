@@ -21,13 +21,8 @@ export class AuthController {
   }
 
   register = async (req, res) => {
-    const { user, accessToken, refreshToken } = await this.authService.register(req.body);
-
-    res.cookie('refreshToken', refreshToken, {
-      ...COOKIE_OPTIONS,
-      maxAge: REFRESH_TOKEN_MAX_AGE,
-    });
-    res.status(201).json({ success: true, data: { user }, accessToken: accessToken });
+    const user = await this.authService.register(req.body);
+    res.status(201).json({ success: true, data: { user } });
   };
 
   login = async (req, res) => {

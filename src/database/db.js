@@ -1,6 +1,10 @@
 import pg from 'pg';
 import { env } from '#config/env.js';
+import { PrismaClient } from '@prisma/client';
+
 const { Pool } = pg;
+
+export const prisma = new PrismaClient();
 
 // Create a connection pool using the direct URL (bypassing pgBouncer)
 export const pool = new Pool({
