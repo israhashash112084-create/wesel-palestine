@@ -1,13 +1,12 @@
-import { config } from '#config/env.js';
+import { UnauthorizedError } from '#shared/utils/errors.js';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: config.cookie.secure,
-  sameSite: config.cookie.sameSite,
+  secure: true,
+  sameSite: 'Strict',
 };
 
-const ACCESS_TOKEN_MAX_AGE = 15 * 60 * 1000; // 15 minutes
-const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
 
 /**
  * Auth controller — handles HTTP layer only.
@@ -22,47 +21,42 @@ export class AuthController {
   }
 
   register = async (req, res) => {
-    const { user } = await this.authService.register(req.body);
-    res.status(201).json({ success: true, data: { user } });
+    const { user, accessToken, refreshToken } = await this.authService.register(req.body);
+
+    res.cookie('refreshToken', refreshToken, {
+      ...COOKIE_OPTIONS,
+      maxAge: REFRESH_TOKEN_MAX_AGE,
+    });
+    res.status(201).json({ success: true, data: { user }, accessToken: accessToken });
   };
 
   login = async (req, res) => {
     const { user, accessToken, refreshToken } = await this.authService.login(req.body);
-
-    res.cookie('accessToken', accessToken, {
-      ...COOKIE_OPTIONS,
-      maxAge: ACCESS_TOKEN_MAX_AGE,
-    });
 
     res.cookie('refreshToken', refreshToken, {
       ...COOKIE_OPTIONS,
       maxAge: REFRESH_TOKEN_MAX_AGE,
     });
 
-    res.status(200).json({ success: true, data: { user } });
+    res.status(200).json({ success: true, data: { user, accessToken } });
   };
 
   refresh = async (req, res) => {
     const refreshToken = req.cookies?.refreshToken;
 
     if (!refreshToken) {
-      return res.status(401).json({ success: false, error: 'No refresh token provided' });
+      throw new UnauthorizedError('No refresh token provided');
     }
 
     const { accessToken, refreshToken: newRefreshToken } =
       await this.authService.refresh(refreshToken);
-
-    res.cookie('accessToken', accessToken, {
-      ...COOKIE_OPTIONS,
-      maxAge: ACCESS_TOKEN_MAX_AGE,
-    });
 
     res.cookie('refreshToken', newRefreshToken, {
       ...COOKIE_OPTIONS,
       maxAge: REFRESH_TOKEN_MAX_AGE,
     });
 
-    res.status(200).json({ success: true });
+    res.status(200).json({ success: true, data: { accessToken } });
   };
 
   logout = async (req, res) => {
@@ -78,6 +72,6 @@ export class AuthController {
   };
 
   me = async (req, res) => {
-    res.status(200).json({ success: true, data: { user: req.user } });
+    res.status(200).json({ success: true, data: { user: req.userInfo } });
   };
 }
