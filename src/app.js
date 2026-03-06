@@ -12,7 +12,7 @@ app.get('/', (req, res) => {
   res.json({ status: 'API Running' });
 });
 
-app.use('/v1', apiV1Router);
+app.use('/api/v1', apiV1Router);
 
 // Global error handler (must be registered after all routes)
 app.use(errorHandler);
