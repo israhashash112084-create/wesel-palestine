@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { env } from '#config/env.js';
 import { ConflictError, UnauthorizedError } from '#shared/utils/errors.js';
+import ms from 'ms';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -39,8 +40,9 @@ export class AuthService {
   /**
    * Log in and return access + refresh tokens.
    * @param {{ email: string, password: string }} credentials
+   * @param {{ deviceId: string, deviceName: string }} deviceInfo
    */
-  async login({ email, password }) {
+  async login({ email, password }, deviceInfo) {
     const user = await this.authRepository.findByEmail(email);
     if (!user) {
       throw new UnauthorizedError('Invalid credentials');
@@ -51,19 +53,19 @@ export class AuthService {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    const { accessToken, refreshToken } = await this._issueTokens(user);
+    const { accessToken, refreshToken } = await this._issueTokens(user, deviceInfo);
     return { user: { id: user.id, email: user.email, role: user.role }, accessToken, refreshToken };
   }
 
   /**
-   * Rotate refresh token and issue new access token.
+   * Rotate refresh token and issue new access token for the same device.
    * @param {string} incomingRefreshToken
    */
   async refresh(incomingRefreshToken) {
     const refreshTokenHash = hashToken(incomingRefreshToken);
-    const storedTokenHash = await this.authRepository.findRefreshToken(refreshTokenHash);
+    const storedToken = await this.authRepository.findRefreshToken(refreshTokenHash);
 
-    if (!storedTokenHash) {
+    if (!storedToken) {
       throw new UnauthorizedError('Invalid or expired refresh token');
     }
 
@@ -82,11 +84,14 @@ export class AuthService {
       throw new UnauthorizedError('User not found');
     }
 
-    // Rotate: delete old, issue new
-    await this.authRepository.deleteRefreshToken(refreshTokenHash);
-    const { accessToken, refreshToken: newRefreshToken } = await this._issueTokens(user);
+    // Rotate: upsert replaces the old hash for the same device
+    const deviceInfo = { deviceId: storedToken.deviceId, deviceName: storedToken.deviceName };
+    const { accessToken, refreshToken: newRefreshToken } = await this._issueTokens(
+      user,
+      deviceInfo
+    );
 
-    return { accessToken, refreshToken: newRefreshToken };
+    return { accessToken, newRefreshToken };
   }
 
   /**
@@ -99,10 +104,14 @@ export class AuthService {
   }
 
   /**
-   * Internal helper: sign JWTs and persist refresh token hash to DB.
+   * Internal helper: sign JWTs and upsert refresh token hash to DB.
+   * If the device already has an active session, its token is replaced.
+   * Otherwise a new session row is created.
+   *
    * @param {{ id: string, email: string, role: string }} user
+   * @param {{ deviceId: string, deviceName: string }} deviceInfo
    */
-  async _issueTokens(user) {
+  async _issueTokens(user, deviceInfo) {
     const payload = { id: user.id, email: user.email, role: user.role };
 
     const accessToken = jwt.sign(payload, env.JWT_ACCESS_SECRET, {
@@ -114,9 +123,15 @@ export class AuthService {
     });
 
     const refreshTokenHash = hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + ms(env.JWT_REFRESH_EXPIRES_IN));
 
-    await this.authRepository.saveRefreshToken(user.id, refreshTokenHash, expiresAt);
+    await this.authRepository.upsertRefreshToken(
+      user.id,
+      refreshTokenHash,
+      expiresAt,
+      deviceInfo.deviceId,
+      deviceInfo.deviceName
+    );
 
     return { accessToken, refreshToken };
   }

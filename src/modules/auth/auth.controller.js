@@ -1,12 +1,28 @@
 import { UnauthorizedError } from '#shared/utils/errors.js';
+import { env } from '#config/env.js';
+import crypto from 'crypto';
+import ms from 'ms';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: true,
+  secure: env.NODE_ENV === 'production',
   sameSite: 'Strict',
 };
 
-const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+const REFRESH_TOKEN_MAX_AGE = ms(env.JWT_REFRESH_EXPIRES_IN); // 7 days in ms
+
+/**
+ * Derives a stable device fingerprint from the User-Agent and IP address.
+ * Used as a fallback when the client does not send an X-Device-ID header.
+ *
+ * @param {import('express').Request} req
+ * @returns {string} 64-char hex string
+ */
+const _fingerprintDevice = (req) => {
+  const ua = req.headers['user-agent'] ?? 'Unknown Device';
+  const ip = req.ip ?? '';
+  return crypto.createHash('sha256').update(`${ua}:${ip}`).digest('hex');
+};
 
 /**
  * Auth controller — handles HTTP layer only.
@@ -26,7 +42,12 @@ export class AuthController {
   };
 
   login = async (req, res) => {
-    const { user, accessToken, refreshToken } = await this.authService.login(req.body);
+    const deviceInfo = {
+      deviceId: req.headers['x-device-id'] ?? _fingerprintDevice(req),
+      deviceName: req.headers['user-agent'] ?? 'Unknown Device',
+    };
+
+    const { user, accessToken, refreshToken } = await this.authService.login(req.body, deviceInfo);
 
     res.cookie('refreshToken', refreshToken, {
       ...COOKIE_OPTIONS,
@@ -43,8 +64,7 @@ export class AuthController {
       throw new UnauthorizedError('No refresh token provided');
     }
 
-    const { accessToken, refreshToken: newRefreshToken } =
-      await this.authService.refresh(refreshToken);
+    const { accessToken, newRefreshToken } = await this.authService.refresh(refreshToken);
 
     res.cookie('refreshToken', newRefreshToken, {
       ...COOKIE_OPTIONS,
