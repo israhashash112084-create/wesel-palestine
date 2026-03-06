@@ -60,12 +60,17 @@ enum CheckpointStatus {
 
 model RefreshToken {
   @@map("refresh_tokens")
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @db.Uuid @map("user_id")
-  tokenHash String   @db.VarChar(255) @map("token_hash")
-  expiresAt DateTime @map("expires_at")
-  
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid @map("user_id")
+  tokenHash  String   @db.VarChar(255) @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  deviceId   String   @db.VarChar(255) @map("device_id")
+  deviceName String   @db.VarChar(255) @map("device_name") @default("Unknown Device")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastUsedAt DateTime @default(now()) @map("last_used_at")
 
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
   @@index([tokenHash])
 }
