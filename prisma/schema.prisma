@@ -27,6 +27,9 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
   checkpoints Checkpoints[]
   refreshTokens RefreshToken[]
+  reports             Report[]             @relation("UserReports")
+  reportVotes         ReportVote[]         @relation("UserVotes")
+  moderationAuditLogs ModerationAuditLog[] @relation("ModerationAuditModerator")
 }
 
 enum Role {
@@ -73,4 +76,101 @@ model RefreshToken {
 
   @@unique([userId, deviceId])
   @@index([tokenHash])
+}
+
+model Report {
+  id              Int          @id @default(autoincrement())
+  userId          String?      @map("user_id") @db.Uuid
+  locationLat     Decimal      @map("location_lat") @db.Decimal(10, 8)
+  locationLng     Decimal      @map("location_lng") @db.Decimal(11, 8)
+  area            String?      @db.VarChar(255)
+  type            IncidentType
+  description     String       @db.Text
+  confidenceScore Int          @default(0) @map("confidence_score")
+  status          ReportStatus @default(pending)
+  moderatedBy     String?      @map("moderated_by") @db.Uuid
+  moderatedAt     DateTime?    @map("moderated_at") @db.Timestamptz(6)
+  rejectReason    String?      @map("reject_reason") @db.Text
+  duplicateOf     Int?         @map("duplicate_of")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  original   Report?  @relation("ReportDuplicates", fields: [duplicateOf], references: [id], onDelete: SetNull)
+  duplicates Report[] @relation("ReportDuplicates")
+
+  user      User? @relation("UserReports", fields: [userId], references: [id], onDelete: SetNull)
+
+  votes     ReportVote[]
+  auditLogs ModerationAuditLog[]
+
+  @@index([userId], map: "idx_reports_user_id")
+  @@index([status], map: "idx_reports_status")
+  @@index([type], map: "idx_reports_type")
+  @@index([duplicateOf], map: "idx_reports_duplicate_of")
+  @@index([locationLat, locationLng], map: "idx_reports_location")
+  @@index([createdAt], map: "idx_reports_created_at")
+  @@map("reports")
+}
+
+enum ReportStatus {
+  pending
+  verified
+  rejected
+}
+
+enum IncidentType {
+  closure
+  delay
+  accident
+  military_activity
+  weather_hazard
+  road_damage
+  protest
+  construction
+  other
+}
+
+model ReportVote {
+  id        Int       @id @default(autoincrement())
+  reportId  Int       @map("report_id")
+  userId    String    @map("user_id") @db.Uuid
+  vote      VoteValue
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user   User   @relation("UserVotes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, userId], map: "unique_user_vote")
+  @@index([reportId], map: "idx_report_votes_report_id")
+  @@index([userId], map: "idx_report_votes_user_id")
+  @@map("report_votes")
+} 
+
+enum VoteValue {
+  up
+  down
+}
+
+model ModerationAuditLog {
+  id          Int              @id @default(autoincrement())
+  reportId    Int              @map("report_id")
+  moderatorId String?          @map("moderator_id") @db.Uuid
+  action      ModerationAction
+  reason      String?          @db.Text
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  report    Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  moderator User?  @relation("ModerationAuditModerator", fields: [moderatorId], references: [id], onDelete: SetNull)
+
+  @@index([reportId], map: "idx_mod_audit_report_id")
+  @@index([moderatorId], map: "idx_mod_audit_moderator_id")
+  @@index([createdAt(sort: Desc)], map: "idx_mod_audit_created_at")
+  @@map("moderation_audit_log")
+}
+
+
+
+enum ModerationAction {
+  approved
+  rejected
 }
