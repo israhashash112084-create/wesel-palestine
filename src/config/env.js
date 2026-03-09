@@ -28,4 +28,9 @@ export const env = {
   JWT_REFRESH_SECRET: required('JWT_REFRESH_SECRET'),
   JWT_ACCESS_EXPIRES_IN: optional('JWT_ACCESS_EXPIRES_IN', '15m'),
   JWT_REFRESH_EXPIRES_IN: optional('JWT_REFRESH_EXPIRES_IN', '7d'),
+
+  REDIS_HOST:     optional('REDIS_HOST', 'localhost'),
+  REDIS_PORT:     optional('REDIS_PORT', '6379'),
+  REDIS_PASSWORD: optional('REDIS_PASSWORD', ''),
+
 };
