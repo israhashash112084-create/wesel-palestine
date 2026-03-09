@@ -2,14 +2,7 @@ import { env } from '#config/env.js';
 import jwt from 'jsonwebtoken';
 import { UnauthorizedError } from '#shared/utils/errors.js';
 
-/**
- * Reads the access token from the HttpOnly cookie and attaches
- * the decoded payload to req.userInfo.
- *
- * Express 5 will forward thrown errors to the global error handler.
- */
-
-export const authenticate = (req, res, next) => {
+const _extractToken = (req) => {
   const authHeader = req.headers?.authorization ?? req.headers?.Authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -20,10 +13,25 @@ export const authenticate = (req, res, next) => {
   // jwt.verify throws TokenExpiredError / JsonWebTokenError on failure;
   // the global error handler normalizes these into 401 responses.
 
-  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
+  try {
+    const token = authHeader.split(' ')[1];
+    return jwt.verify(token, env.JWT_ACCESS_SECRET);
+  } catch {
+    return null;
+  }
+};
+export const authenticate = (req, res, next) => {
+  const decoded = _extractToken(req);
+  if (!decoded) throw new UnauthorizedError('No authentication token provided');
   req.userInfo = decoded;
   next();
 };
+export const optionalAuthenticate = (req, res, next) => {
+  const decoded = _extractToken(req);
+  if (decoded) req.userInfo = decoded;
+  next();
+};
+
 
 /**
  * Middleware factory that checks if the authenticated user has
