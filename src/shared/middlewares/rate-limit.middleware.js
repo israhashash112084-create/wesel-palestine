@@ -1,8 +1,7 @@
 import { rateLimit }         from 'express-rate-limit';
 import { RedisStore }        from 'rate-limit-redis';
 import redisClient           from '#shared/utils/radis.js';
-import { REPORT_RATE_LIMIT } from '#shared/constants/enums.js';
-
+import { env } from '#config/env.js';
 /**
  * @param {{ max: number, windowSec: number, message?: string }} options
  */
@@ -25,7 +24,7 @@ const createRateLimiter = ({ max, windowSec, message }) =>
   });
 
 export const reportSubmitLimiter = createRateLimiter({
-  max:       REPORT_RATE_LIMIT.MAX_REPORTS,
-  windowSec: REPORT_RATE_LIMIT.WINDOW_SECONDS,
-  message:   `You can only submit ${REPORT_RATE_LIMIT.MAX_REPORTS} reports every ${REPORT_RATE_LIMIT.WINDOW_SECONDS / 60} minutes.`,
+  max:       parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 1000,
+  message:   `You can only submit ${env.RATE_LIMIT_MAX_REQUESTS} reports every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
