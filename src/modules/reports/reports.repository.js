@@ -1,8 +1,7 @@
 import { prisma, query } from '#database/db.js';
-import {
-  DUPLICATE_DETECTION,
-  USER_DUPLICATE_PREVENTION,
-} from '#shared/constants/enums.js';
+const DUPLICATE_RADIUS_METERS  = 500;
+const DUPLICATE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000; 
+const USER_TIME_WINDOW_MS      = 60 * 60 * 1000;      
 
 export class ReportsRepository {
   async create(data) {
@@ -32,8 +31,6 @@ export class ReportsRepository {
 }
 
   async findNearbyDuplicate({ locationLat, locationLng, type }) {
-    const { RADIUS_METERS, TIME_WINDOW_MS } = DUPLICATE_DETECTION;
-
     return this.findNearestMatchingReport({
       selectClause: 'id,user_id, location_lat, location_lng, type, status',
       whereClause: `
@@ -42,16 +39,14 @@ export class ReportsRepository {
         AND duplicate_of IS NULL
         AND created_at > NOW() - ($2 || ' seconds')::INTERVAL
       `,
-      params: [type, this.msToSeconds(TIME_WINDOW_MS), locationLat, locationLng],
+      params: [type, this.msToSeconds(DUPLICATE_TIME_WINDOW_MS), locationLat, locationLng],
       latParamIndex: 3,
       lngParamIndex: 4,
-      radiusMeters: RADIUS_METERS,
+      radiusMeters: DUPLICATE_RADIUS_METERS,
     });
   }
 
   async findUserDuplicateReport({ userId, locationLat, locationLng, type }) {
-    const { RADIUS_METERS, TIME_WINDOW_MS } = USER_DUPLICATE_PREVENTION;
-
     return this.findNearestMatchingReport({
       selectClause: 'id, type, status, created_at',
       whereClause: `
@@ -60,10 +55,10 @@ export class ReportsRepository {
         AND status != 'rejected'
         AND created_at > NOW() - ($5 || ' seconds')::INTERVAL
       `,
-      params: [userId, type, locationLat, locationLng, this.msToSeconds(TIME_WINDOW_MS)],
+      params: [userId, type, locationLat, locationLng, this.msToSeconds(USER_TIME_WINDOW_MS)],
       latParamIndex: 3,
       lngParamIndex: 4,
-      radiusMeters: RADIUS_METERS,
+      radiusMeters: DUPLICATE_RADIUS_METERS,
     });
   }
 
