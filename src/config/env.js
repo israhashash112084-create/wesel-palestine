@@ -32,5 +32,7 @@ export const env = {
   REDIS_HOST:     optional('REDIS_HOST', 'localhost'),
   REDIS_PORT:     optional('REDIS_PORT', '6379'),
   REDIS_PASSWORD: optional('REDIS_PASSWORD', ''),
+  RATE_LIMIT_WINDOW_MS:      optional('RATE_LIMIT_WINDOW_MS', '600000'),
+  RATE_LIMIT_MAX_REQUESTS:   optional('RATE_LIMIT_MAX_REQUESTS', '10'),
 
 };
