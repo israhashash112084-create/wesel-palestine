@@ -47,23 +47,6 @@ export const VOTE_VALUES = {
   DOWN: 'down',
 };
 
-export const DUPLICATE_DETECTION = {
-  RADIUS_METERS:  500,
-  TIME_WINDOW_MS: 2 * 60 * 60 * 1000, 
-};
 
-export const CONFIDENCE_THRESHOLDS = {
-  AUTO_REJECT_BELOW:  0.20,
-  AUTO_VERIFY_ABOVE:  0.70,
-};
 
-export const USER_DUPLICATE_PREVENTION = {
-  RADIUS_METERS:  500,
-  TIME_WINDOW_MS: 60 * 60 * 1000, 
-};
-
-export const REPORT_RATE_LIMIT = {
-  MAX_REPORTS:    5,
-  WINDOW_SECONDS: 5 * 60, 
-};
 
