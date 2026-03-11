@@ -2,16 +2,9 @@ import { env } from '#config/env.js';
 import jwt from 'jsonwebtoken';
 import { UnauthorizedError } from '#shared/utils/errors.js';
 
-const _extractToken = (req) => {
+const _verifyToken  = (req) => {
   const authHeader = req.headers?.authorization ?? req.headers?.Authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new UnauthorizedError('No authentication token provided');
-  }
-  const token = authHeader.split(' ')[1];
-
-  // jwt.verify throws TokenExpiredError / JsonWebTokenError on failure;
-  // the global error handler normalizes these into 401 responses.
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
 
   try {
     const token = authHeader.split(' ')[1];
@@ -20,16 +13,18 @@ const _extractToken = (req) => {
     return null;
   }
 };
+
 export const authenticate = (req, res, next) => {
-  const decoded = _extractToken(req);
+  const decoded = _verifyToken (req);
   if (!decoded) throw new UnauthorizedError('No authentication token provided');
   req.userInfo = decoded;
   next();
 };
+
 export const optionalAuthenticate = (req, res, next) => {
-  const decoded = _extractToken(req);
+  const decoded = _verifyToken (req);
   if (decoded) req.userInfo = decoded;
-  next();
+  next(); 
 };
 
 
