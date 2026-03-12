@@ -1,34 +1,34 @@
 import { prisma, query } from '#database/db.js';
-const DUPLICATE_RADIUS_METERS  = 500;
-const DUPLICATE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000; 
-const USER_TIME_WINDOW_MS      = 60 * 60 * 1000;      
+const DUPLICATE_RADIUS_METERS = 500;
+const DUPLICATE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
+const USER_TIME_WINDOW_MS = 60 * 60 * 1000;
 
 export class ReportsRepository {
   async create(data) {
-  return prisma.report.create({
-    data: {
-      userId:      data.userId,
-      locationLat: data.locationLat,
-      locationLng: data.locationLng,
-      area:        data.area ?? null,
-      type:        data.type,
-      description: data.description,
-      duplicateOf: data.duplicateOf ?? null,
-    },
-    select: {
-      id:              true,
-      type:            true,
-      status:          true,
-      locationLat:     true,
-      locationLng:     true,
-      confidenceScore: true,
-      createdAt:       true,
-      user: {
-        select: { id: true, firstName: true, lastName: true },
+    return prisma.report.create({
+      data: {
+        userId: data.userId,
+        locationLat: data.locationLat,
+        locationLng: data.locationLng,
+        area: data.area ?? null,
+        type: data.type,
+        description: data.description,
+        duplicateOf: data.duplicateOf ?? null,
       },
-    },
-  });
-}
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        locationLat: true,
+        locationLng: true,
+        confidenceScore: true,
+        createdAt: true,
+        user: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
+    });
+  }
 
   async findNearbyDuplicate({ locationLat, locationLng, type }) {
     return this.findNearestMatchingReport({
@@ -110,5 +110,75 @@ export class ReportsRepository {
 
   msToSeconds(ms) {
     return ms / 1000;
+  }
+
+  async findById(id) {
+    const report = await prisma.report.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        area: true,
+        description: true,
+        rejectReason: true,
+        userId: true,       
+        locationLat: true,
+        locationLng: true,
+        confidenceScore: true,
+        createdAt: true,
+        user: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
+    });
+    if (!report) return null;
+    const filteredReport = Object.fromEntries(
+      Object.entries(report).filter(([key, value]) => value !== null)
+    );
+    return filteredReport;
+    //return report;
+  }
+
+  async findMany({ status, type, area, skip, take, sortBy, sortOrder }) {
+
+    const where = {
+      duplicateOf: null,
+    };
+
+    if (status !== undefined) where.status = status;
+    if (type) where.type = type;
+    if (area) where.area = { contains: area, mode: 'insensitive' };
+    const [reports, total] = await prisma.$transaction([
+      prisma.report.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder }, skip,
+        take,
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          area: true,
+          description: true,
+          locationLat: true,
+          locationLng: true,
+          confidenceScore: true,
+          createdAt: true,
+          user: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+        },
+      }),
+      prisma.report.count({ where }),
+    ]);
+
+    const cleanedReports = reports.map(report => {
+      const filteredReport = Object.fromEntries(
+        Object.entries(report).filter(([key, value]) => value !== null)
+      );
+      return filteredReport;
+    });
+
+    return { reports: cleanedReports, total };
   }
 }
