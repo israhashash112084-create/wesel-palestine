@@ -67,7 +67,7 @@ export const validateRequest = (schema, location = 'body') => {
       throw new ValidationError(error.details.map((d) => d.message).join(', '));
     }
 
-    req[location] = value;
+    Object.assign(req[location], value);
     next();
   };
 };
