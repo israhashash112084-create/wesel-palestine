@@ -12,6 +12,20 @@ export class ReportsController {
         res.status(201).json({
             success: true,
             data: result,
-        });  
+        });
+    };
+    retrieveReports = async (req, res) => {
+        const result = await this.reportsService.retrieveReports(req.query, req.userInfo);
+        res.status(200).json({
+            success: true,
+            data: result,
+        });
+    };
+    getReport = async (req, res) => {
+        const result = await this.reportsService.getReport(parseInt(req.params.id, 10), req.userInfo);
+        res.status(200).json({
+            success: true,
+            data: result,
+        });
     };
 }
