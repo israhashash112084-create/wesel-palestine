@@ -30,6 +30,8 @@ model User {
   reports             Report[]             @relation("UserReports")
   reportVotes         ReportVote[]         @relation("UserVotes")
   moderationAuditLogs ModerationAuditLog[] @relation("ModerationAuditModerator")
+  reportedIncidents   Incidents[]          @relation("IncidentReporter")
+
 }
 
 enum Role {
@@ -49,7 +51,7 @@ model Checkpoints {
   status     CheckpointStatus @default(open)
   createdBy   String?   @db.Uuid @map("created_by")
   user       User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  
+  incidents Incidents[]
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 }
@@ -85,6 +87,7 @@ model Report {
   locationLng     Decimal      @map("location_lng") @db.Decimal(11, 8)
   area            String?      @db.VarChar(255)
   type            IncidentType
+  severity        IncidentSeverity  @default(low)
   description     String       @db.Text
   confidenceScore Int          @default(0) @map("confidence_score")
   status          ReportStatus @default(pending)
@@ -118,6 +121,40 @@ enum ReportStatus {
   rejected
 }
 
+model Incidents {
+  id           Int              @id @default(autoincrement())
+  checkpointId Int?             @map("checkpoint_id")
+  reportedBy   String?          @map("reported_by") @db.Uuid
+
+  locationLat Decimal @map("location_lat") @db.Decimal(10, 8)
+  locationLng Decimal @map("location_lng") @db.Decimal(11, 8)
+  area        String? @db.VarChar(255)
+
+  type        IncidentType
+  severity    IncidentSeverity
+  description String?          @db.Text
+  status      IncidentStatus   @default(pending)
+  isVerified  Boolean          @default(false) @map("is_verified")
+
+  verifiedAt DateTime? @map("verified_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  checkpoint Checkpoints? @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
+  reporter   User?        @relation("IncidentReporter", fields: [reportedBy], references: [id], onDelete: SetNull)
+
+  @@index([checkpointId],          map: "idx_incidents_checkpoint_id")
+  @@index([type],                  map: "idx_incidents_type")
+  @@index([severity],              map: "idx_incidents_severity")
+  @@index([status],                map: "idx_incidents_status")
+  @@index([isVerified],            map: "idx_incidents_is_verified")
+  @@index([reportedBy],            map: "idx_incidents_reported_by")
+  @@index([createdAt(sort: Desc)], map: "idx_incidents_created_at")
+  @@map("incidents")
+}
+
 enum IncidentType {
   closure
   delay
@@ -129,6 +166,21 @@ enum IncidentType {
   construction
   other
 }
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum IncidentStatus {
+  pending
+  verified
+  resolved
+  closed
+}
+
 
 model ReportVote {
   id        Int       @id @default(autoincrement())
