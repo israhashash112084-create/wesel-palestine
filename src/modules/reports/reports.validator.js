@@ -43,6 +43,14 @@ export const createReportSchema = Joi.object({
             'string.max': 'description must not exceed 1000 characters',
             'any.required': 'description is required',
         }),
-    
+});
+export const listReportsSchema = Joi.object({
+    status: Joi.string().valid('pending', 'verified', 'rejected').optional(),
+    type: Joi.string().valid(...VALID_TYPES).optional(),
+    area: Joi.string().max(255).optional(),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(10),
+    sortBy: Joi.string().valid('createdAt', 'confidenceScore').default('createdAt'),
+    sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
 });
 
