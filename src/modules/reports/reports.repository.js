@@ -119,25 +119,27 @@ export class ReportsRepository {
         id: true,
         type: true,
         status: true,
+        severity: true,
         area: true,
         description: true,
         rejectReason: true,
-        userId: true,       
+        userId: true,
         locationLat: true,
         locationLng: true,
         confidenceScore: true,
         createdAt: true,
+        duplicateOf: true,
         user: {
           select: { id: true, firstName: true, lastName: true },
         },
       },
     });
-    if (!report) return null;
-    const filteredReport = Object.fromEntries(
-      Object.entries(report).filter(([key, value]) => value !== null)
-    );
-    return filteredReport;
-    //return report;
+    // if (!report) return null;
+    // const filteredReport = Object.fromEntries(
+    //   Object.entries(report).filter(([key, value]) => value !== null)
+    // );
+    // return filteredReport;
+    return report;
   }
 
   async findMany({ status, type, area, skip, take, sortBy, sortOrder }) {
@@ -180,5 +182,84 @@ export class ReportsRepository {
     });
 
     return { reports: cleanedReports, total };
+  }
+  async upsertVote(reportId, userId, vote) {
+    const existing = await prisma.reportVote.findUnique({
+      where: { reportId_userId: { reportId, userId } },
+    });
+
+    await prisma.reportVote.upsert({
+      where: { reportId_userId: { reportId, userId } },
+      create: { reportId, userId, vote },
+      update: { vote },
+    });
+
+    return {
+      isNew: !existing,
+      previousVote: existing?.vote ?? null,
+      currentVote: vote,
+    };
+  }
+  async update(id, data) {
+    return prisma.report.update({
+      where: { id },
+      data,
+    });
+  }
+  async getVoteCounts(reportId) {
+    const [upCount, downCount] = await prisma.$transaction([
+      prisma.reportVote.count({ where: { reportId, vote: 'up' } }),
+      prisma.reportVote.count({ where: { reportId, vote: 'down' } }),
+    ]);
+    return { upCount, downCount, total: upCount + downCount };
+  }
+  async createAuditLog({ reportId, moderatorId, action, reason }) {
+    return prisma.moderationAuditLog.create({
+      data: { reportId, moderatorId: moderatorId ?? null, action, reason: reason ?? null },
+    });
+  }
+  async findNearestCheckpoint({ locationLat, locationLng }) {
+    const result = await query(
+      `
+    SELECT id, name, status,
+      (
+        6371000 * acos(
+          LEAST(1.0,
+            cos(radians($1)) * cos(radians(latitude))
+            * cos(radians(longitude) - radians($2))
+            + sin(radians($1)) * sin(radians(latitude))
+          )
+        )
+      ) AS distance_meters
+    FROM checkpoints
+    ORDER BY distance_meters ASC
+    LIMIT 1
+    `,
+      [locationLat, locationLng]
+    );
+    return this._filterByDistance(result.rows[0], CHECKPOINT_RADIUS_METERS);
+  }
+  async updateCheckpointStatus(checkpointId, newStatus) {
+    return prisma.checkpoints.update({
+      where: { id: checkpointId },
+      data: { status: newStatus },
+    });
+  }
+  async createIncident(data) {
+    return prisma.incidents.create({
+      data: {
+        checkpointId: data.checkpointId ?? null,
+        reportedBy: data.reportedBy ?? null,
+        locationLat: data.locationLat,
+        locationLng: data.locationLng,
+        area: data.area ?? null,
+        type: data.type,
+        severity: data.severity,
+        description: data.description ?? null,
+        status: 'verified',
+        isVerified: true,
+        verifiedAt: new Date(),
+      },
+    });
   }
 }
