@@ -1,8 +1,14 @@
-import { ConflictError, NotFoundError, ForbiddenError } from '#shared/utils/errors.js';
+import { ConflictError, NotFoundError, ForbiddenError, BadRequestError } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { UserRoles } from '#shared/constants/roles.js';
 import { REPORT_STATUSES } from '#shared/constants/enums.js';
-
+const MIN_VOTES_REQUIRED = 4;
+const AUTO_VERIFY_ABOVE = 0.7;
+const AUTO_REJECT_BELOW = 0.3;
+const CHECKPOINT_TYPES_STATUS = {
+    closure: 'closed',
+    delay: 'slow',
+};
 export class ReportsService {
 
     constructor(reportsRepository) {
@@ -17,7 +23,7 @@ export class ReportsService {
     }
 
     _buildVoteInfo(report, userInfo) {
-
+        
         const voteUrl = `POST /api/v1/reports/${report.id}/vote`;
 
         if (!userInfo) {
@@ -36,7 +42,11 @@ export class ReportsService {
             return {};
         }
 
-        return { voteUrl };
+        return {
+            voteGuide: {
+                step1: `Then vote: ${voteUrl}`,
+            },
+        };
     }
 
     async submitReport(body, userId) {
@@ -157,5 +167,97 @@ export class ReportsService {
         }
 
         return response;
+    }
+    async voteOnReport(reportId, userId, vote) {
+        const report = await this.repo.findById(reportId);
+        if (!report) throw new NotFoundError('Report');
+        if (report.userId === userId)
+            throw new ForbiddenError('You cannot vote on your own report');
+        if (report.duplicateOf !== null) {
+            throw new BadRequestError(
+                `This is a duplicate report. Please vote on the original report (#${report.duplicateOf})`
+            );
+        }
+        if (report.status !== REPORT_STATUSES.PENDING) {
+            throw new BadRequestError(`Cannot vote on a report with status: ${report.status}`);
+        }
+
+        const { isNew, previousVote, currentVote } = await this.repo.upsertVote(
+            reportId, userId, vote
+        );
+        let scoreChange = 0;
+        if (isNew) {
+            scoreChange = currentVote === 'up' ? 1 : -1;
+        } else if (previousVote !== currentVote) {
+            scoreChange = currentVote === 'up' ? 2 : -2;
+        }
+        if (scoreChange !== 0) {
+            const newScore = Math.max(0, report.confidenceScore + scoreChange);
+            await this.repo.update(reportId, { confidenceScore: newScore });
+        }
+        await this._checkAutoDecision(report);
+        return {
+            message: isNew ? 'Vote submitted successfully' : 'Vote updated successfully',
+            vote: currentVote,
+            reportId,
+        };
+    }
+    async _checkAutoDecision(report) {
+        const { upCount, downCount, total } = await this.repo.getVoteCounts(report.id);
+        if (total < MIN_VOTES_REQUIRED) return;
+        const upRatio = upCount / total;
+        if (upRatio >= AUTO_VERIFY_ABOVE) {
+            const verifyReason = `Auto-verified: ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
+            await this.repo.update(report.id, {
+                status: 'verified',
+                moderatedAt: new Date(),
+            });
+            await this.repo.createAuditLog({
+                reportId: report.id,
+                moderatorId: null,
+                action: 'approved',
+                reason: verifyReason
+            });
+            await this._createIncidentFromReport(report);
+        } else if (upRatio < AUTO_REJECT_BELOW) {
+            const rejectReason = `Auto-rejected: only ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
+            await this.repo.update(report.id, {
+                status: 'rejected',
+                rejectReason,
+                moderatedAt: new Date(),
+            });
+
+            await this.repo.createAuditLog({
+                reportId: report.id,
+                moderatorId: null,
+                action: 'rejected',
+                reason: rejectReason,
+            });
+        }
+    }
+    async _createIncidentFromReport(report) {
+        let checkpointId = null;
+        const newCheckpointStatus = CHECKPOINT_TYPES_STATUS[report.type];
+        if (newCheckpointStatus) {
+            const checkpoint = await this.repo.findNearestCheckpoint({
+                locationLat: report.locationLat,
+                locationLng: report.locationLng,
+            });
+
+            if (checkpoint) {
+                checkpointId = checkpoint.id;
+                await this.repo.updateCheckpointStatus(checkpoint.id, newCheckpointStatus);
+            }
+        }
+        await this.repo.createIncident({
+            checkpointId,
+            reportedBy: report.userId,
+            locationLat: report.locationLat,
+            locationLng: report.locationLng,
+            area: report.area,
+            type: report.type,
+            severity: report.severity,
+            description: report.description,
+        });
     }
 }
