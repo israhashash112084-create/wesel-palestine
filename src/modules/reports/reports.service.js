@@ -323,11 +323,11 @@ export class ReportsService {
                 `This is a duplicate report. Moderate the original report (#${report.duplicateOf}) instead`
             );
         }
-        // if (report.status === REPORT_STATUSES.VERIFIED) {
-        //     throw new BadRequestError(
-        //         'Cannot moderate a verified report. The report has already been verified and an incident has been created'
-        //     );
-        // }
+        if (report.status === REPORT_STATUSES.VERIFIED) {
+            throw new BadRequestError(
+                'Cannot moderate a verified report. The report has already been verified and an incident has been created'
+            );
+        }
 
         if (report.status === REPORT_STATUSES.REJECTED && body.action === 'reject') {
             throw new BadRequestError('Report is already rejected');
@@ -347,7 +347,10 @@ export class ReportsService {
                 action: 'approved',
                 reason: body.reason ?? null,
             });
-
+            await this.repo.updateMany(
+                { duplicateOf: report.id },
+                { status: 'verified', moderatedAt: new Date(), rejectReason: null, }
+            );
             // await this._createIncidentFromReport(report);
             await this.repo.increaseReportOwnersScore(report.id);
             return { message: 'Report approved and incident created successfully' };
@@ -366,6 +369,10 @@ export class ReportsService {
             action: 'rejected',
             reason: body.reason,
         });
+        await this.repo.updateMany(
+            { duplicateOf: report.id },
+            { status: 'rejected', rejectReason: body.reason, moderatedAt: new Date() }
+        );
         await this.repo.decreaseReportOwnersScore(report.id);
 
         return { message: 'Report rejected successfully' };
