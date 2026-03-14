@@ -135,6 +135,7 @@ model Incidents {
   type        IncidentType
   severity    IncidentSeverity
   description String?          @db.Text
+  trafficStatus TrafficStatus  @default(unknown) @map("traffic_status")
 
   verifiedAt DateTime?         @map("verified_at")
   resolvedAt DateTime?         @map("resolved_at")
@@ -169,6 +170,8 @@ model IncidentStatusHistory {
 
   changedAt  DateTime         @default(now()) @db.Timestamptz(6)
   notes      String?
+  oldValues  Json?            @map("old_values")
+  newValues  Json?            @map("new_values")
 
   incident   Incidents        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   user       User             @relation(fields: [changedBy], references: [id], onDelete: Cascade)

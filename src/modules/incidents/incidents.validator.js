@@ -59,4 +59,5 @@ export const updateIncidentBodySchema = Joi.object({
     .max(100)
     .optional()
     .valid(...incidentTypes),
+  notes: Joi.string().max(500).optional(),
 }).min(1);

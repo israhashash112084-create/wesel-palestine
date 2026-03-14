@@ -1,4 +1,4 @@
-import { prisma } from '#database/db.js';
+import { prisma, prismaTransaction } from '#database/db.js';
 
 export class IncidentsRepository {
   _baseSelect() {
@@ -109,6 +109,39 @@ export class IncidentsRepository {
         type: data.type,
       },
       select: this._baseSelect(),
+    });
+
+    return this._normalizeRecord(updatedIncident);
+  }
+
+  async updateWithStatusHistory(id, data) {
+    const updatedIncident = await prismaTransaction(async (tx) => {
+      const incident = await tx.incidents.update({
+        where: { id },
+        data: {
+          severity: data.severity,
+          description: data.description,
+          trafficStatus: data.trafficStatus,
+          locationLat: data.locationLat,
+          locationLng: data.locationLng,
+          type: data.type,
+        },
+        select: this._baseSelect(),
+      });
+
+      await tx.incidentStatusHistory.create({
+        data: {
+          incidentId: id,
+          changedBy: data.changedBy,
+          oldStatus: data.oldStatus,
+          newStatus: data.trafficStatus ?? data.oldStatus,
+          notes: data.notes,
+          oldValues: data.oldValues,
+          newValues: data.newValues,
+        },
+      });
+
+      return incident;
     });
 
     return this._normalizeRecord(updatedIncident);

@@ -15,7 +15,7 @@ export class IncidentsController {
 
   updateIncident = async (req, res) => {
     const { id } = req.params;
-    const result = await this.incidentService.updateIncident(id, req.body);
+    const result = await this.incidentService.updateIncident(id, req.body, req.userInfo);
     res.status(200).json({ success: true, data: result });
   };
 }

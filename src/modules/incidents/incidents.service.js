@@ -1,8 +1,50 @@
-import { NotFoundError } from '#shared/utils/errors.js';
+import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
 
 export class IncidentsService {
   constructor(incidentsRepository) {
     this.repo = incidentsRepository;
+  }
+
+  _toComparableValue(value) {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    if (typeof value === 'object' && typeof value.toString === 'function') {
+      return value.toString();
+    }
+
+    return value;
+  }
+
+  _buildAuditDiff(existingIncident, body) {
+    const updatableFields = [
+      'severity',
+      'description',
+      'trafficStatus',
+      'locationLat',
+      'locationLng',
+      'type',
+    ];
+
+    const oldValues = {};
+    const newValues = {};
+
+    for (const field of updatableFields) {
+      if (body[field] === undefined) {
+        continue;
+      }
+
+      const oldValue = this._toComparableValue(existingIncident[field]);
+      const newValue = this._toComparableValue(body[field]);
+
+      if (oldValue !== newValue) {
+        oldValues[field] = oldValue;
+        newValues[field] = newValue;
+      }
+    }
+
+    return { oldValues, newValues };
   }
 
   async getAllIncidents() {
@@ -27,19 +69,30 @@ export class IncidentsService {
     });
   }
 
-  async updateIncident(id, body) {
+  async updateIncident(id, body, userInfo) {
     const existingIncident = await this.repo.findById(id);
     if (!existingIncident) {
       throw new NotFoundError('Incident not found');
     }
 
-    const updatedIncident = await this.repo.update(id, {
+    const { oldValues, newValues } = this._buildAuditDiff(existingIncident, body);
+
+    if (Object.keys(newValues).length === 0) {
+      throw new BadRequestError('No changes detected in update payload');
+    }
+
+    const updatedIncident = await this.repo.updateWithStatusHistory(id, {
       severity: body.severity,
       description: body.description,
       trafficStatus: body.trafficStatus,
       locationLat: body.locationLat,
       locationLng: body.locationLng,
       type: body.type,
+      oldStatus: existingIncident.trafficStatus,
+      changedBy: userInfo.id,
+      notes: body.notes,
+      oldValues,
+      newValues,
     });
 
     return updatedIncident;
