@@ -2,7 +2,7 @@ import { prisma, query } from '#database/db.js';
 const DUPLICATE_RADIUS_METERS = 500;
 const DUPLICATE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
 const USER_TIME_WINDOW_MS = 60 * 60 * 1000;
-const CHECKPOINT_RADIUS_METERS = 500;
+//const CHECKPOINT_RADIUS_METERS = 500;
 export class ReportsRepository {
   async create(data) {
     return prisma.report.create({
@@ -173,6 +173,12 @@ export class ReportsRepository {
   }
 
   async update(id, data) {
+    return prisma.report.update({
+      where: { id },
+      data,
+    });
+  }
+  async updateMany(id, data) {
     return prisma.report.update({
       where: { id },
       data,

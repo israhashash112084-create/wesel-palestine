@@ -218,6 +218,10 @@ export class ReportsService {
                 action: 'approved',
                 reason: verifyReason
             });
+            await this.repo.updateMany(
+                { duplicateOf: reportId },
+                { status: 'verified', moderatedAt: new Date() }
+            );
             await this.repo.increaseReportOwnersScore(report.id);
             // await this._createIncidentFromReport(report);
         } else if (upRatio < AUTO_REJECT_BELOW) {
@@ -234,6 +238,10 @@ export class ReportsService {
                 action: 'rejected',
                 reason: rejectReason,
             });
+            await this.repo.updateMany(
+                { duplicateOf: reportId },
+                { status: 'rejected', rejectReason: reason, moderatedAt: new Date() }
+            );
             await this.repo.decreaseReportOwnersScore(report.id);
         }
     }
