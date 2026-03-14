@@ -77,3 +77,21 @@ export const reportIdSchema = Joi.object({
             'any.required': 'Report ID is required',
         }),
 });
+export const moderateReportSchema = Joi.object({
+  action: Joi.string()
+    .valid('approve', 'reject').required()
+    .messages({
+      'any.only':     'action must be either approve or reject',
+      'any.required': 'action is required',
+    }),
+
+  reason: Joi.when('action', {
+    is:        'reject',
+    then:      Joi.string().min(5).max(500).required().messages({
+      'string.min':   'reason must be at least 5 characters',
+      'string.max':   'reason must not exceed 500 characters',
+      'any.required': 'reason is required when rejecting a report',
+    }),
+    otherwise: Joi.string().min(5).max(500).optional(),
+  }),
+});
