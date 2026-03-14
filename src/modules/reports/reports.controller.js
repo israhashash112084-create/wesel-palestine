@@ -29,14 +29,24 @@ export class ReportsController {
         });
     };
     voteOnReport = async (req, res, next) => {
-    try {
-      const result = await this.reportsService.voteOnReport(
-        parseInt(req.params.id, 10),
-        req.userInfo.id,
-        req.body.vote
-      );
-      res.status(200).json({ success: true, data: result });
-    } catch (err) { next(err); }
-  };
-    
+        try {
+            const result = await this.reportsService.voteOnReport(
+                parseInt(req.params.id, 10),
+                req.userInfo.id,
+                req.body.vote
+            );
+            res.status(200).json({ success: true, data: result });
+        } catch (err) { next(err); }
+    };
+    updateReport = async (req, res, next) => {
+        try {
+            const result = await this.reportsService.updateReport(
+                parseInt(req.params.id, 10),
+                req.body,
+                req.userInfo.id
+            );
+            res.status(200).json({ success: true, data: result });
+        } catch (err) { next(err); }
+    };
+
 }
