@@ -14,7 +14,7 @@ export const pool = new Pool({
   password: env.DB_PASSWORD,
   database: env.DB_NAME,
   ssl: env.DB_SSL ? { rejectUnauthorized: false } : false,
-  max: env.DB_POOL_MAX,
+  max: env.DB_POOL_MAX_SIZE,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
