@@ -178,9 +178,9 @@ export class ReportsRepository {
       data,
     });
   }
-  async updateMany(id, data) {
-    return prisma.report.update({
-      where: { id },
+  async updateMany(where, data) {
+    return prisma.report.updateMany({
+      where,
       data,
     });
   }
