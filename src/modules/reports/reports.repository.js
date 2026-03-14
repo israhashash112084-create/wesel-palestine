@@ -2,7 +2,7 @@ import { prisma, query } from '#database/db.js';
 const DUPLICATE_RADIUS_METERS = 500;
 const DUPLICATE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
 const USER_TIME_WINDOW_MS = 60 * 60 * 1000;
-
+const CHECKPOINT_RADIUS_METERS = 500;
 export class ReportsRepository {
   async create(data) {
     return prisma.report.create({
@@ -12,12 +12,14 @@ export class ReportsRepository {
         locationLng: data.locationLng,
         area: data.area ?? null,
         type: data.type,
+        severity: data.severity,
         description: data.description,
         duplicateOf: data.duplicateOf ?? null,
       },
       select: {
         id: true,
         type: true,
+        severity: true,
         status: true,
         locationLat: true,
         locationLng: true,
@@ -30,7 +32,8 @@ export class ReportsRepository {
     });
   }
 
-  async findNearbyDuplicate({ locationLat, locationLng, type }) {
+  async findNearbyDuplicate({ locationLat, locationLng, type, excludeId = null }) {
+    const excludeClause = excludeId ? `AND id != ${excludeId}` : '';
     return this.findNearestMatchingReport({
       selectClause: 'id,user_id, location_lat, location_lng, type, status',
       whereClause: `
@@ -38,6 +41,7 @@ export class ReportsRepository {
         AND status IN ('pending', 'verified')
         AND duplicate_of IS NULL
         AND created_at > NOW() - ($2 || ' seconds')::INTERVAL
+        ${excludeClause}
       `,
       params: [type, this.msToSeconds(DUPLICATE_TIME_WINDOW_MS), locationLat, locationLng],
       latParamIndex: 3,
@@ -67,49 +71,6 @@ export class ReportsRepository {
       where: { id: reportId },
       data: { confidenceScore: { increment } },
     });
-  }
-
-  async findNearestMatchingReport({
-    selectClause,
-    whereClause,
-    params,
-    latParamIndex,
-    lngParamIndex,
-    radiusMeters,
-  }) {
-    const result = await query(
-      `
-      SELECT ${selectClause},
-        (
-          6371000 * acos(
-            LEAST(1.0,
-              cos(radians($${latParamIndex})) * cos(radians(location_lat))
-              * cos(radians(location_lng) - radians($${lngParamIndex}))
-              + sin(radians($${latParamIndex})) * sin(radians(location_lat))
-            )
-          )
-        ) AS distance_meters
-      FROM reports
-      WHERE ${whereClause}
-      ORDER BY distance_meters ASC
-      LIMIT 1
-      `,
-      params
-    );
-
-    return this.filterByDistance(result.rows[0], radiusMeters);
-  }
-
-  filterByDistance(row, radiusMeters) {
-    if (!row || Number(row.distance_meters) > radiusMeters) {
-      return null;
-    }
-
-    return row;
-  }
-
-  msToSeconds(ms) {
-    return ms / 1000;
   }
 
   async findById(id) {
@@ -159,6 +120,7 @@ export class ReportsRepository {
         select: {
           id: true,
           type: true,
+          severity: true,
           status: true,
           area: true,
           description: true,
@@ -183,6 +145,7 @@ export class ReportsRepository {
 
     return { reports: cleanedReports, total };
   }
+
   async upsertVote(reportId, userId, vote) {
     const existing = await prisma.reportVote.findUnique({
       where: { reportId_userId: { reportId, userId } },
@@ -200,12 +163,14 @@ export class ReportsRepository {
       currentVote: vote,
     };
   }
+
   async update(id, data) {
     return prisma.report.update({
       where: { id },
       data,
     });
   }
+
   async getVoteCounts(reportId) {
     const [upCount, downCount] = await prisma.$transaction([
       prisma.reportVote.count({ where: { reportId, vote: 'up' } }),
@@ -213,11 +178,13 @@ export class ReportsRepository {
     ]);
     return { upCount, downCount, total: upCount + downCount };
   }
+
   async createAuditLog({ reportId, moderatorId, action, reason }) {
     return prisma.moderationAuditLog.create({
       data: { reportId, moderatorId: moderatorId ?? null, action, reason: reason ?? null },
     });
   }
+
   async findNearestCheckpoint({ locationLat, locationLng }) {
     const result = await query(
       `
@@ -237,14 +204,16 @@ export class ReportsRepository {
     `,
       [locationLat, locationLng]
     );
-    return this._filterByDistance(result.rows[0], CHECKPOINT_RADIUS_METERS);
+    return this.filterByDistance(result.rows[0], CHECKPOINT_RADIUS_METERS);
   }
+
   async updateCheckpointStatus(checkpointId, newStatus) {
     return prisma.checkpoints.update({
       where: { id: checkpointId },
       data: { status: newStatus },
     });
   }
+
   async createIncident(data) {
     return prisma.incidents.create({
       data: {
@@ -262,4 +231,48 @@ export class ReportsRepository {
       },
     });
   }
+
+  async findNearestMatchingReport({
+    selectClause,
+    whereClause,
+    params,
+    latParamIndex,
+    lngParamIndex,
+    radiusMeters,
+  }) {
+    const result = await query(
+      `
+      SELECT ${selectClause},
+        (
+          6371000 * acos(
+            LEAST(1.0,
+              cos(radians($${latParamIndex})) * cos(radians(location_lat))
+              * cos(radians(location_lng) - radians($${lngParamIndex}))
+              + sin(radians($${latParamIndex})) * sin(radians(location_lat))
+            )
+          )
+        ) AS distance_meters
+      FROM reports
+      WHERE ${whereClause}
+      ORDER BY distance_meters ASC
+      LIMIT 1
+      `,
+      params
+    );
+
+    return this.filterByDistance(result.rows[0], radiusMeters);
+  }
+
+  filterByDistance(row, radiusMeters) {
+    if (!row || Number(row.distance_meters) > radiusMeters) {
+      return null;
+    }
+
+    return row;
+  }
+
+  msToSeconds(ms) {
+    return ms / 1000;
+  }
+
 }
