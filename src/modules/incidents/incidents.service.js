@@ -1,18 +1,12 @@
-import { UserRoles } from '#shared/constants/roles.js';
+import { NotFoundError } from '#shared/utils/errors.js';
 
 export class IncidentsService {
   constructor(incidentsRepository) {
     this.repo = incidentsRepository;
   }
 
-  _isRegularUser(userInfo) {
-    return userInfo?.role === UserRoles.USER;
-  }
-
-  async getAllIncidents(userInfo) {
-    const isRegularUser = this._isRegularUser(userInfo);
-
-    return isRegularUser ? this.repo.findByReportedBy(userInfo.id) : this.repo.findMany();
+  async getAllIncidents() {
+    return this.repo.findMany();
   }
 
   async createIncident(userInfo, body) {
@@ -31,5 +25,23 @@ export class IncidentsService {
       description: body.description,
       trafficStatus: body.trafficStatus,
     });
+  }
+
+  async updateIncident(id, body) {
+    const existingIncident = await this.repo.findById(id);
+    if (!existingIncident) {
+      throw new NotFoundError('Incident not found');
+    }
+
+    const updatedIncident = await this.repo.update(id, {
+      severity: body.severity,
+      description: body.description,
+      trafficStatus: body.trafficStatus,
+      locationLat: body.locationLat,
+      locationLng: body.locationLng,
+      type: body.type,
+    });
+
+    return updatedIncident;
   }
 }

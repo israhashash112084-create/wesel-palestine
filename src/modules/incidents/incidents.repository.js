@@ -49,6 +49,17 @@ export class IncidentsRepository {
     );
   }
 
+  _normalizeRecord(record) {
+    const cleaned = this._removeNullValues(record);
+
+    if (Object.hasOwn(cleaned, 'VerifiedBy')) {
+      cleaned.verifiedBy = cleaned.VerifiedBy;
+      delete cleaned.VerifiedBy;
+    }
+
+    return cleaned;
+  }
+
   async create(data) {
     const incident = await prisma.incidents.create({
       data: {
@@ -65,7 +76,7 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return this._removeNullValues(incident);
+    return this._normalizeRecord(incident);
   }
 
   async findMany() {
@@ -74,18 +85,32 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return incidents.map((incident) => this._removeNullValues(incident));
+    return incidents.map((incident) => this._normalizeRecord(incident));
   }
 
-  async findByReportedBy(userId) {
-    const where = { reportedBy: userId };
-
-    const incidents = await prisma.incidents.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
+  async findById(id) {
+    const incident = await prisma.incidents.findUnique({
+      where: { id },
       select: this._baseSelect(),
     });
 
-    return incidents.map((incident) => this._removeNullValues(incident));
+    return incident ? this._normalizeRecord(incident) : null;
+  }
+
+  async update(id, data) {
+    const updatedIncident = await prisma.incidents.update({
+      where: { id },
+      data: {
+        severity: data.severity,
+        description: data.description,
+        trafficStatus: data.trafficStatus,
+        locationLat: data.locationLat,
+        locationLng: data.locationLng,
+        type: data.type,
+      },
+      select: this._baseSelect(),
+    });
+
+    return this._normalizeRecord(updatedIncident);
   }
 }
