@@ -3,6 +3,7 @@ import { getOsrmRoute } from '#integrations/routing/osrm.client.js';
 import { getWeather } from '#integrations/weather/weather.client.js';
 import { API_SERVICES, CHECKPOINT_STATUSES, INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
 import { BadRequestError } from '#shared/utils/errors.js';
+import { haversine, distanceBetween } from '#shared/utils/geo.js';
 
 const CACHE_TTL_CLEAR_MS    = 60 * 60 * 1000;
 const CACHE_TTL_INCIDENT_MS = 10 * 60 * 1000;
@@ -22,7 +23,7 @@ const DELAY_INCIDENT = {
 const DELAY_WEATHER       = 10;
 const AVERAGE_SPEED_KMH   = 60;
 
-const _haversine = (from, to) => {
+/*const _haversine = (from, to) => {
   const R    = 6371;
   const dLat = ((to.lat - from.lat) * Math.PI) / 180;
   const dLng = ((to.lng - from.lng) * Math.PI) / 180;
@@ -35,7 +36,7 @@ const _haversine = (from, to) => {
 };
 
 const _distanceBetween = (lat1, lng1, lat2, lng2) =>
-  _haversine({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
+  _haversine({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });*/
 
 const _buildCacheKey = (from, to, avoidCheckpoints) => {
   const raw = `${from.lat},${from.lng}|${to.lat},${to.lng}|${[...avoidCheckpoints].sort().join(',')}`;
@@ -49,7 +50,7 @@ export class RoutesService {
     this.routesRepository = routesRepository;
   }
 
-  async estimateRoute({ from, to, avoid_checkpoints }) {
+  async estimateRoute({ from, to, avoid_checkpoints, include_geometry }) {
 
     if (from.lat === to.lat && from.lng === to.lng) {
       throw new BadRequestError('Origin and destination cannot be the same');
@@ -69,16 +70,16 @@ export class RoutesService {
 
     const checkpointsOnRoute = allCheckpoints.filter((cp) => {
       const distFromRoute = Math.min(
-        _distanceBetween(from.lat, from.lng, Number(cp.latitude), Number(cp.longitude)),
-        _distanceBetween(to.lat,   to.lng,   Number(cp.latitude), Number(cp.longitude))
+        distanceBetween(from.lat, from.lng, Number(cp.latitude), Number(cp.longitude)),
+        distanceBetween(to.lat,   to.lng,   Number(cp.latitude), Number(cp.longitude))
       );
       return distFromRoute <= 15;
     });
 
     const incidentsOnRoute = allIncidents.filter((inc) => {
       const distFromRoute = Math.min(
-        _distanceBetween(from.lat, from.lng, Number(inc.locationLat), Number(inc.locationLng)),
-        _distanceBetween(to.lat,   to.lng,   Number(inc.locationLat), Number(inc.locationLng))
+        distanceBetween(from.lat, from.lng, Number(inc.locationLat), Number(inc.locationLng)),
+        distanceBetween(to.lat,   to.lng,   Number(inc.locationLat), Number(inc.locationLng))
       );
       return distFromRoute <= 20;
     });
@@ -101,7 +102,7 @@ export class RoutesService {
       });
 
     } catch {
-      distanceKm      = _haversine(from, to);
+      distanceKm      = haversine(from, to);
       durationMinutes = parseFloat(((distanceKm / AVERAGE_SPEED_KMH) * 60).toFixed(2));
       geometry        = null;
       isFallback      = true;
@@ -206,7 +207,7 @@ export class RoutesService {
         condition:   weather.condition,
         description: weather.description,
       } : null,
-      geometry,
+      geometry: include_geometry ? geometry : null,
     };
 
     await this.routesRepository.saveCache({
