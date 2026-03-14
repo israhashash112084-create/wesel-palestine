@@ -37,6 +37,13 @@ export class ReportsService {
 
         const isModerator = this._isModerator(userInfo);
         const isOwner = userInfo.id === report.userId;
+        if (report.duplicateOf !== null) {
+            return {
+                voteGuide: {
+                    note: `This is a duplicate report. Vote on the original: POST /api/v1/reports/${report.duplicateOf}/vote`,
+                },
+            };
+        }
 
         if (isModerator || isOwner || report.status === REPORT_STATUSES.VERIFIED) {
             return {};
@@ -98,6 +105,9 @@ export class ReportsService {
 
             if (filters.status === REPORT_STATUSES.REJECTED && !isModerator) {
                 throw new ForbiddenError('You are not allowed to view rejected reports');
+            }
+            if (filters.status === REPORT_STATUSES.VERIFIED && !isModerator) {
+                throw new ForbiddenError('You are not allowed to view VERIFIED reports');
             }
 
             statusFilter = filters.status;
@@ -177,6 +187,12 @@ export class ReportsService {
         if (report.status !== REPORT_STATUSES.PENDING) {
             throw new BadRequestError(`Cannot vote on a report with status: ${report.status}`);
         }
+        const userDuplicate = await this.repo.findUserDuplicateForReport(reportId, userId);
+        if (userDuplicate) {
+            throw new ForbiddenError(
+                `You already submitted a duplicate report (#${userDuplicate.id}) for this report. Your confirmation already counts`
+            );
+        }
 
         const { isNew, previousVote, currentVote } = await this.repo.upsertVote(
             reportId, userId, vote
@@ -214,7 +230,8 @@ export class ReportsService {
                 action: 'approved',
                 reason: verifyReason
             });
-            await this._createIncidentFromReport(report);
+            await this.repo.increaseReportOwnersScore(report.id);
+            // await this._createIncidentFromReport(report);
         } else if (upRatio < AUTO_REJECT_BELOW) {
             const rejectReason = `Auto-rejected: only ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
             await this.repo.update(report.id, {
@@ -229,22 +246,23 @@ export class ReportsService {
                 action: 'rejected',
                 reason: rejectReason,
             });
+            await this.repo.decreaseReportOwnersScore(report.id);
         }
     }
     async _createIncidentFromReport(report) {
         let checkpointId = null;
-        const newCheckpointStatus = CHECKPOINT_TYPES_STATUS[report.type];
-        if (newCheckpointStatus) {
-            const checkpoint = await this.repo.findNearestCheckpoint({
-                locationLat: report.locationLat,
-                locationLng: report.locationLng,
-            });
+        // const newCheckpointStatus = CHECKPOINT_TYPES_STATUS[report.type];
+        // if (newCheckpointStatus) {
+        //     const checkpoint = await this.repo.findNearestCheckpoint({
+        //         locationLat: report.locationLat,
+        //         locationLng: report.locationLng,
+        //     });
 
-            if (checkpoint) {
-                checkpointId = checkpoint.id;
-                await this.repo.updateCheckpointStatus(checkpoint.id, newCheckpointStatus);
-            }
-        }
+        //     if (checkpoint) {
+        //         checkpointId = checkpoint.id;
+        //         await this.repo.updateCheckpointStatus(checkpoint.id, newCheckpointStatus);
+        //     }
+        // }
         await this.repo.createIncident({
             checkpointId,
             reportedBy: report.userId,
@@ -334,8 +352,8 @@ export class ReportsService {
                 reason: body.reason ?? null,
             });
 
-            await this._createIncidentFromReport(report);
-
+            // await this._createIncidentFromReport(report);
+            await this.repo.increaseReportOwnersScore(report.id);
             return { message: 'Report approved and incident created successfully' };
         }
 
@@ -352,6 +370,7 @@ export class ReportsService {
             action: 'rejected',
             reason: body.reason,
         });
+        await this.repo.decreaseReportOwnersScore(report.id);
 
         return { message: 'Report rejected successfully' };
     }
