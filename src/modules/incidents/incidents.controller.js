@@ -30,4 +30,10 @@ export class IncidentsController {
     const result = await this.incidentService.closeIncident(id, req.userInfo);
     res.status(200).json({ success: true, data: result });
   };
+
+  getIncidentReports = async (req, res) => {
+    const { id } = req.params;
+    const reports = await this.incidentService.getIncidentReports(id);
+    res.status(200).json({ success: true, data: reports });
+  };
 }

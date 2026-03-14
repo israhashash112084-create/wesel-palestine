@@ -24,6 +24,7 @@ router.get(
   validateRequest(listIncidentsSchema, 'query'),
   incidentsController.getAllIncidents
 );
+
 router.get(
   '/:id',
   authenticate,
@@ -39,6 +40,7 @@ router.post(
   validateRequest(createIncidentSchema, 'body'),
   incidentsController.createIncident
 );
+
 router.patch(
   '/:id',
   authenticate,
@@ -54,6 +56,14 @@ router.patch(
   authorize('moderator', 'admin'),
   validateRequest(incidentIdParamSchema, 'params'),
   incidentsController.closeIncident
+);
+
+router.get(
+  '/:id/reports',
+  authenticate,
+  authorize('moderator', 'admin'),
+  validateRequest(incidentIdParamSchema, 'params'),
+  incidentsController.getIncidentReports
 );
 
 export default router;

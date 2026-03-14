@@ -166,4 +166,20 @@ export class IncidentsService {
 
     return updatedIncident;
   }
+
+  async getIncidentReports(incidentId) {
+    const incident = await this.repo.findById(incidentId);
+    if (!incident) {
+      throw new NotFoundError('Incident not found');
+    }
+
+    // mock data for now, will implement actual reports logic in the future
+    return [
+      {
+        id: 'report1',
+        incidentId,
+        reportedBy: 'user1',
+      },
+    ];
+  }
 }
