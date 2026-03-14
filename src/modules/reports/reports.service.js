@@ -23,7 +23,7 @@ export class ReportsService {
     }
 
     _buildVoteInfo(report, userInfo) {
-        
+
         const voteUrl = `POST /api/v1/reports/${report.id}/vote`;
 
         if (!userInfo) {
@@ -51,8 +51,7 @@ export class ReportsService {
 
     async submitReport(body, userId) {
 
-        const { locationLat, locationLng, area, type, description } = body;
-
+        const { locationLat, locationLng, area, type, severity, description } = body;
         const userDuplicate = await this.repo.findUserDuplicateReport({
             userId, locationLat, locationLng, type,
         });
@@ -68,12 +67,8 @@ export class ReportsService {
         });
 
         const report = await this.repo.create({
-            userId,
-            locationLat,
-            locationLng,
-            area,
-            type,
-            description,
+            userId, locationLat, locationLng,
+            area, type, severity, description,
             duplicateOf: duplicate ? duplicate.id : null,
         });
 
@@ -83,6 +78,7 @@ export class ReportsService {
 
         return {
             report,
+            editUrl: `PUT /api/v1/reports/${report.id}`,
             message: duplicate
                 ? `Your report has been received and linked to an existing report (#${duplicate.id}) in the same area. Thank you for confirming!`
                 : 'Your report has been successfully submitted and is now pending review. Thank you!',
@@ -259,5 +255,50 @@ export class ReportsService {
             severity: report.severity,
             description: report.description,
         });
+    }
+    async updateReport(reportId, body, userId) {
+        const report = await this.repo.findById(reportId);
+        if (!report) throw new NotFoundError('Report');
+        if (report.userId !== userId) {
+            throw new ForbiddenError('You can only edit your own reports');
+        }
+        if (report.status !== REPORT_STATUSES.PENDING) {
+            throw new BadRequestError(
+                `Cannot edit a report with status: ${report.status}. Only pending reports can be edited`
+            );
+        }
+        const { locationLat, locationLng, area, type, severity, description } = body;
+        const newDuplicate = await this.repo.findNearbyDuplicate({
+            locationLat,
+            locationLng,
+            type,
+            excludeId: reportId,
+        });
+        const newDuplicateOf = newDuplicate ? newDuplicate.id : null;
+        if (report.duplicateOf !== newDuplicateOf) {
+            if (report.duplicateOf) {
+                await this.repo.incrementReportConfidenceScore(report.duplicateOf, -1);
+            }
+            if (newDuplicateOf) {
+                await this.repo.incrementReportConfidenceScore(newDuplicateOf, 1);
+            }
+        }
+        const updatedReport = await this.repo.update(reportId, {
+            locationLat,
+            locationLng,
+            area: area ?? null,
+            type,
+            severity,
+            description,
+            duplicateOf: newDuplicateOf,
+        });
+
+        return {
+            report: updatedReport,
+            message: newDuplicateOf
+                ? `Report updated and linked to existing report (#${newDuplicateOf}) in the same area`
+                : 'Report updated successfully',
+        };
+
     }
 }
