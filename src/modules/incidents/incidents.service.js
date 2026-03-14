@@ -1,4 +1,5 @@
 import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
+import { getPaginationParams } from '#shared/utils/pagination.js';
 
 export class IncidentsService {
   constructor(incidentsRepository) {
@@ -47,8 +48,41 @@ export class IncidentsService {
     return { oldValues, newValues };
   }
 
-  async getAllIncidents() {
-    return this.repo.findMany();
+  async getAllIncidents(filters) {
+    const {
+      type,
+      severity,
+      trafficStatus,
+      checkpointId,
+      reportedBy,
+      fromDate,
+      toDate,
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+    } = filters;
+
+    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+
+    const { incidents, total } = await this.repo.findMany({
+      type,
+      severity,
+      trafficStatus,
+      checkpointId,
+      reportedBy,
+      fromDate,
+      toDate,
+      skip,
+      take,
+      sortBy,
+      sortOrder,
+    });
+
+    return {
+      incidents: incidents,
+      pagination: buildPaginationMeta(total),
+    };
   }
 
   async getIncidentById(id) {

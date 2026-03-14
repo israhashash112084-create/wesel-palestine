@@ -4,7 +4,7 @@ export class IncidentsController {
   }
 
   getAllIncidents = async (req, res) => {
-    const incidents = await this.incidentService.getAllIncidents();
+    const incidents = await this.incidentService.getAllIncidents(req.query);
     res.status(200).json({ success: true, data: incidents });
   };
 

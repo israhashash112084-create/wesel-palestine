@@ -79,13 +79,49 @@ export class IncidentsRepository {
     return this._normalizeRecord(incident);
   }
 
-  async findMany() {
-    const incidents = await prisma.incidents.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: this._baseSelect(),
+  async findMany({
+    type,
+    severity,
+    trafficStatus,
+    checkpointId,
+    reportedBy,
+    fromDate,
+    toDate,
+    skip,
+    take,
+    sortBy,
+    sortOrder,
+  }) {
+    const where = {};
+
+    if (type) where.type = type;
+    if (severity) where.severity = severity;
+    if (trafficStatus) where.trafficStatus = trafficStatus;
+    if (checkpointId) where.checkpointId = checkpointId;
+    if (reportedBy) where.reportedBy = reportedBy;
+    if (fromDate || toDate) {
+      where.createdAt = {};
+      if (fromDate) where.createdAt.gte = new Date(fromDate);
+      if (toDate) where.createdAt.lte = new Date(toDate);
+    }
+
+    const { incidents, total } = await prismaTransaction(async (tx) => {
+      const incidents = await tx.incidents.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take,
+        select: this._baseSelect(),
+      });
+
+      const total = await tx.incidents.count({ where });
+
+      return { incidents, total };
     });
 
-    return incidents.map((incident) => this._normalizeRecord(incident));
+    const cleanedIncidents = incidents.map((incident) => this._normalizeRecord(incident));
+
+    return { incidents: cleanedIncidents, total };
   }
 
   async findById(id) {

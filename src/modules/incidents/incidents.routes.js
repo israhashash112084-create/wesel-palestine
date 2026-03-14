@@ -8,6 +8,7 @@ import {
   createIncidentSchema,
   updateIncidentBodySchema,
   incidentIdParamSchema,
+  listIncidentsSchema,
 } from './incidents.validator.js';
 
 const router = Router();
@@ -16,7 +17,13 @@ const incidentsRepository = new IncidentsRepository();
 const incidentsService = new IncidentsService(incidentsRepository);
 const incidentsController = new IncidentsController(incidentsService);
 
-router.get('/', authenticate, authorize('moderator', 'admin'), incidentsController.getAllIncidents);
+router.get(
+  '/',
+  authenticate,
+  authorize('moderator', 'admin'),
+  validateRequest(listIncidentsSchema, 'query'),
+  incidentsController.getAllIncidents
+);
 router.get(
   '/:id',
   authenticate,

@@ -61,3 +61,25 @@ export const updateIncidentBodySchema = Joi.object({
     .valid(...incidentTypes),
   notes: Joi.string().max(500).optional(),
 }).min(1);
+
+export const listIncidentsSchema = Joi.object({
+  type: Joi.string()
+    .valid(...incidentTypes)
+    .optional(),
+  severity: Joi.string()
+    .valid(...incidentSeverities)
+    .optional(),
+  trafficStatus: Joi.string()
+    .valid(...trafficStatuses)
+    .optional(),
+  checkpointId: Joi.number().integer().positive().optional(),
+  reportedBy: Joi.number().integer().positive().optional(),
+  fromDate: Joi.date().iso().optional(),
+  toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
+    'date.greater': 'toDate must be greater than fromDate',
+  }),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  sortBy: Joi.string().valid('createdAt', 'severity').default('createdAt'),
+  sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
+});
