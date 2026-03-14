@@ -301,4 +301,59 @@ export class ReportsService {
         };
 
     }
+    async moderateReport(reportId, body, moderatorId) {
+        const report = await this.repo.findById(reportId);
+        if (!report) throw new NotFoundError('Report');
+        if (report.duplicateOf !== null) {
+            throw new BadRequestError(
+                `This is a duplicate report. Moderate the original report (#${report.duplicateOf}) instead`
+            );
+        }
+        // if (report.status === REPORT_STATUSES.VERIFIED) {
+        //     throw new BadRequestError(
+        //         'Cannot moderate a verified report. The report has already been verified and an incident has been created'
+        //     );
+        // }
+
+        if (report.status === REPORT_STATUSES.REJECTED && body.action === 'reject') {
+            throw new BadRequestError('Report is already rejected');
+        }
+
+        if (body.action === 'approve') {
+            await this.repo.update(reportId, {
+                status: 'verified',
+                moderatedBy: moderatorId,
+                moderatedAt: new Date(),
+                rejectReason: null,
+            });
+
+            await this.repo.createAuditLog({
+                reportId,
+                moderatorId,
+                action: 'approved',
+                reason: body.reason ?? null,
+            });
+
+            await this._createIncidentFromReport(report);
+
+            return { message: 'Report approved and incident created successfully' };
+        }
+
+        await this.repo.update(reportId, {
+            status: 'rejected',
+            rejectReason: body.reason,
+            moderatedBy: moderatorId,
+            moderatedAt: new Date(),
+        });
+
+        await this.repo.createAuditLog({
+            reportId,
+            moderatorId,
+            action: 'rejected',
+            reason: body.reason,
+        });
+
+        return { message: 'Report rejected successfully' };
+    }
+
 }
