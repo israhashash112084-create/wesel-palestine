@@ -49,7 +49,15 @@ export class ReportsRepository {
       radiusMeters: DUPLICATE_RADIUS_METERS,
     });
   }
-
+  async findUserDuplicateForReport(reportId, userId) {
+    return prisma.report.findFirst({
+      where: {
+        duplicateOf: reportId,
+        userId: userId,
+      },
+      select: { id: true },
+    });
+  }
   async findUserDuplicateReport({ userId, locationLat, locationLng, type }) {
     return this.findNearestMatchingReport({
       selectClause: 'id, type, status, created_at',
@@ -185,27 +193,27 @@ export class ReportsRepository {
     });
   }
 
-  async findNearestCheckpoint({ locationLat, locationLng }) {
-    const result = await query(
-      `
-    SELECT id, name, status,
-      (
-        6371000 * acos(
-          LEAST(1.0,
-            cos(radians($1)) * cos(radians(latitude))
-            * cos(radians(longitude) - radians($2))
-            + sin(radians($1)) * sin(radians(latitude))
-          )
-        )
-      ) AS distance_meters
-    FROM checkpoints
-    ORDER BY distance_meters ASC
-    LIMIT 1
-    `,
-      [locationLat, locationLng]
-    );
-    return this.filterByDistance(result.rows[0], CHECKPOINT_RADIUS_METERS);
-  }
+  // async findNearestCheckpoint({ locationLat, locationLng }) {
+  //   const result = await query(
+  //     `
+  //   SELECT id, name, status,
+  //     (
+  //       6371000 * acos(
+  //         LEAST(1.0,
+  //           cos(radians($1)) * cos(radians(latitude))
+  //           * cos(radians(longitude) - radians($2))
+  //           + sin(radians($1)) * sin(radians(latitude))
+  //         )
+  //       )
+  //     ) AS distance_meters
+  //   FROM checkpoints
+  //   ORDER BY distance_meters ASC
+  //   LIMIT 1
+  //   `,
+  //     [locationLat, locationLng]
+  //   );
+  //   return this.filterByDistance(result.rows[0], CHECKPOINT_RADIUS_METERS);
+  // }
 
   async updateCheckpointStatus(checkpointId, newStatus) {
     return prisma.checkpoints.update({
@@ -231,6 +239,37 @@ export class ReportsRepository {
       },
     });
   }
+  async adjustReportOwnersScore(reportId, amount) {
+    const original = await prisma.report.findUnique({
+      where: { id: reportId },
+      select: { userId: true },
+    });
+
+    const duplicates = await prisma.report.findMany({
+      where: { duplicateOf: reportId },
+      select: { userId: true },
+    });
+
+    const userIds = [
+      original?.userId,
+      ...duplicates.map(d => d.userId),
+    ].filter(Boolean);
+
+    const uniqueUserIds = [...new Set(userIds)];
+    if (uniqueUserIds.length === 0) return;
+
+    await prisma.user.updateMany({
+      where: { id: { in: uniqueUserIds } },
+      data: { confidenceScore: { increment: amount } },
+    });
+  }
+  async increaseReportOwnersScore(reportId) {
+    return this.adjustReportOwnersScore(reportId, 1);
+  }
+  async decreaseReportOwnersScore(reportId) {
+    return this.adjustReportOwnersScore(reportId, -1);
+  }
+
 
   async findNearestMatchingReport({
     selectClause,
