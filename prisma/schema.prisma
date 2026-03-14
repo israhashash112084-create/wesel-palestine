@@ -1,32 +1,169 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
 model User {
+  id                                     String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                  String                    @unique
+  firstName                              String                    @map("first_name") @db.VarChar(50)
+  lastName                               String                    @map("last_name") @db.VarChar(50)
+  role                                   Role                      @default(user)
+  createdAt                              DateTime                  @default(now()) @map("created_at")
+  updatedAt                              DateTime                  @updatedAt @map("updated_at")
+  confidenceScore                        Float                     @default(0.0) @map("confidence_score")
+  passwordHash                           String                    @map("password_hash") @db.VarChar(255)
+  checkpoints                            Checkpoints[]
+  incident_status_history                incident_status_history[]
+  incidents_incidents_reported_byTousers incidents[]               @relation("incidents_reported_byTousers")
+  incidents_incidents_verified_byTousers incidents[]               @relation("incidents_verified_byTousers")
+  moderation_audit_log                   moderation_audit_log[]
+  refreshTokens                          RefreshToken[]
+  report_votes                           report_votes[]
+  reports                                reports[]
+
   @@map("users")
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email     String   @unique
-  passwordHash  String   @db.VarChar(255) @map("password_hash")
-  firstName String   @db.VarChar(50) @map("first_name")
-  lastName  String   @db.VarChar(50) @map("last_name")
-  role      Role     @default(user)
-  confidenceScore Float    @default(0.0) @map("confidence_score")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  checkpoints Checkpoints[]
-  refreshTokens RefreshToken[]
+}
+
+model Checkpoints {
+  id          Int           @id @default(autoincrement())
+  name        String        @db.VarChar(100)
+  areaName    String?       @map("area_name") @db.VarChar(100)
+  description String?
+  latitude    Decimal       @db.Decimal(10, 6)
+  longitude   Decimal       @db.Decimal(10, 6)
+  status      TrafficStatus @default(open)
+  createdBy   String?       @map("created_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  user        User?         @relation(fields: [createdBy], references: [id])
+  incidents   incidents[]
+
+  @@map("checkpoints")
+}
+
+model RefreshToken {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  tokenHash  String   @map("token_hash") @db.VarChar(255)
+  expiresAt  DateTime @map("expires_at")
+  deviceId   String   @map("device_id") @db.VarChar(255)
+  deviceName String   @default("Unknown Device") @map("device_name") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastUsedAt DateTime @default(now()) @map("last_used_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+model incident_status_history {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  incident_id Int
+  changed_by  String        @db.Uuid
+  old_status  TrafficStatus
+  new_status  TrafficStatus
+  notes       String?
+  old_values  Json?
+  new_values  Json?
+  changedAt   DateTime      @default(now()) @db.Timestamptz(6)
+  users       User          @relation(fields: [changed_by], references: [id], onDelete: Cascade)
+  incidents   incidents     @relation(fields: [incident_id], references: [id], onDelete: Cascade)
+}
+
+model incidents {
+  id                                 Int                       @id @default(autoincrement())
+  checkpoint_id                      Int?
+  reported_by                        String                    @db.Uuid
+  location_lat                       Decimal                   @db.Decimal(10, 8)
+  location_lng                       Decimal                   @db.Decimal(11, 8)
+  area                               String?                   @db.VarChar(255)
+  type                               IncidentType
+  severity                           IncidentSeverity
+  description                        String?
+  verified_at                        DateTime?
+  resolved_at                        DateTime?
+  created_at                         DateTime                  @default(now())
+  updated_at                         DateTime
+  traffic_status                     TrafficStatus             @default(unknown)
+  verified_by                        String?                   @db.Uuid
+  incident_status_history            incident_status_history[]
+  checkpoints                        Checkpoints?              @relation(fields: [checkpoint_id], references: [id])
+  users_incidents_reported_byTousers User                      @relation("incidents_reported_byTousers", fields: [reported_by], references: [id], onDelete: Cascade)
+  users_incidents_verified_byTousers User?                     @relation("incidents_verified_byTousers", fields: [verified_by], references: [id])
+
+  @@index([checkpoint_id], map: "idx_incidents_checkpoint_id")
+  @@index([created_at(sort: Desc)], map: "idx_incidents_created_at")
+  @@index([reported_by], map: "idx_incidents_reported_by")
+  @@index([severity], map: "idx_incidents_severity")
+  @@index([type], map: "idx_incidents_type")
+  @@index([verified_by], map: "idx_incidents_verified_by")
+}
+
+model moderation_audit_log {
+  id           Int              @id @default(autoincrement())
+  report_id    Int
+  moderator_id String?          @db.Uuid
+  action       ModerationAction
+  reason       String?
+  created_at   DateTime         @default(now())
+  users        User?            @relation(fields: [moderator_id], references: [id])
+  reports      reports          @relation(fields: [report_id], references: [id], onDelete: Cascade)
+
+  @@index([created_at(sort: Desc)], map: "idx_mod_audit_created_at")
+  @@index([moderator_id], map: "idx_mod_audit_moderator_id")
+  @@index([report_id], map: "idx_mod_audit_report_id")
+}
+
+model report_votes {
+  id         Int       @id @default(autoincrement())
+  report_id  Int
+  user_id    String    @db.Uuid
+  vote       VoteValue
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  reports    reports   @relation(fields: [report_id], references: [id], onDelete: Cascade)
+  users      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([report_id, user_id], map: "unique_user_vote")
+  @@index([report_id], map: "idx_report_votes_report_id")
+  @@index([user_id], map: "idx_report_votes_user_id")
+}
+
+model reports {
+  id                   Int                    @id @default(autoincrement())
+  user_id              String?                @db.Uuid
+  location_lat         Decimal                @db.Decimal(10, 8)
+  location_lng         Decimal                @db.Decimal(11, 8)
+  area                 String?                @db.VarChar(255)
+  type                 IncidentType
+  description          String
+  confidence_score     Int                    @default(0)
+  status               ReportStatus           @default(pending)
+  moderated_by         String?                @db.Uuid
+  moderated_at         DateTime?              @db.Timestamptz(6)
+  reject_reason        String?
+  duplicate_of         Int?
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @db.Timestamptz(6)
+  severity             IncidentSeverity       @default(low)
+  moderation_audit_log moderation_audit_log[]
+  report_votes         report_votes[]
+  reports              reports?               @relation("reportsToreports", fields: [duplicate_of], references: [id])
+  other_reports        reports[]              @relation("reportsToreports")
+  users                User?                  @relation(fields: [user_id], references: [id])
+
+  @@index([created_at], map: "idx_reports_created_at")
+  @@index([duplicate_of], map: "idx_reports_duplicate_of")
+  @@index([location_lat, location_lng], map: "idx_reports_location")
+  @@index([status], map: "idx_reports_status")
+  @@index([type], map: "idx_reports_type")
+  @@index([user_id], map: "idx_reports_user_id")
 }
 
 enum Role {
@@ -35,42 +172,49 @@ enum Role {
   admin
 }
 
-model Checkpoints {
-  @@map("checkpoints")
-  id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(100)
-  areaName   String?    @db.VarChar(100) @map("area_name")
-  description String?  @db.Text
-  latitude    Decimal    @db.Decimal(10, 6)
-  longitude   Decimal    @db.Decimal(10, 6)
-  status     CheckpointStatus @default(open)
-  createdBy   String?   @db.Uuid @map("created_by")
-  user       User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
 }
 
-enum CheckpointStatus {
+enum IncidentStatus {
+  pending
+  verified
+}
+
+enum IncidentType {
+  closure
+  delay
+  accident
+  military_activity
+  weather_hazard
+  road_damage
+  protest
+  construction
+  other
+}
+
+enum ModerationAction {
+  approved
+  rejected
+}
+
+enum ReportStatus {
+  pending
+  verified
+  rejected
+}
+
+enum TrafficStatus {
   open
   closed
   slow
   unknown
 }
 
-model RefreshToken {
-  @@map("refresh_tokens")
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId     String   @db.Uuid @map("user_id")
-  tokenHash  String   @db.VarChar(255) @map("token_hash")
-  expiresAt  DateTime @map("expires_at")
-  deviceId   String   @db.VarChar(255) @map("device_id")
-  deviceName String   @db.VarChar(255) @map("device_name") @default("Unknown Device")
-  createdAt  DateTime @default(now()) @map("created_at")
-  lastUsedAt DateTime @default(now()) @map("last_used_at")
-
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, deviceId])
-  @@index([tokenHash])
+enum VoteValue {
+  up
+  down
 }
