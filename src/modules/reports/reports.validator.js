@@ -1,9 +1,9 @@
 import Joi from 'joi';
-import { INCIDENT_TYPES, REPORT_STATUSES } from '#shared/constants/enums.js';
-
+import { INCIDENT_TYPES, REPORT_STATUSES,INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
+const VALID_SEVERITIES = Object.values(INCIDENT_SEVERITIES);
 const VALID_TYPES = Object.values(INCIDENT_TYPES);
 const VALID_STATUSES = Object.values(REPORT_STATUSES);
-export const createReportSchema = Joi.object({
+export const ReportSchema = Joi.object({
     locationLat: Joi.number()
         .min(31.2)
         .max(32.6)
@@ -43,7 +43,14 @@ export const createReportSchema = Joi.object({
             'string.max': 'description must not exceed 1000 characters',
             'any.required': 'description is required',
         }),
+    severity: Joi.string()
+        .valid(...VALID_SEVERITIES).required()
+        .messages({
+            'any.only': `severity must be one of: ${VALID_SEVERITIES.join(', ')}`,
+            'any.required': 'severity is required',
+        }),
 });
+
 export const listReportsSchema = Joi.object({
     status: Joi.string().valid(...VALID_STATUSES).optional(),
     type: Joi.string().valid(...VALID_TYPES).optional(),
