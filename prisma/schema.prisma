@@ -136,6 +136,7 @@ model Incidents {
   severity    IncidentSeverity
   description String?          @db.Text
   trafficStatus TrafficStatus  @default(unknown) @map("traffic_status")
+  status      IncidentStatus   @default(pending)
 
   verifiedAt DateTime?         @map("verified_at")
   resolvedAt DateTime?         @map("resolved_at")
@@ -200,6 +201,7 @@ enum IncidentSeverity {
 enum IncidentStatus {
   pending
   verified
+  closed
 }
 
 enum TrafficStatus {

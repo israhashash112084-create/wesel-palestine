@@ -48,4 +48,12 @@ router.patch(
   incidentsController.updateIncident
 );
 
+router.patch(
+  '/:id/close',
+  authenticate,
+  authorize('moderator', 'admin'),
+  validateRequest(incidentIdParamSchema, 'params'),
+  incidentsController.closeIncident
+);
+
 export default router;

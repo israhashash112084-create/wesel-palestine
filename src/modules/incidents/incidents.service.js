@@ -1,5 +1,6 @@
 import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
+import { INCIDENT_STATUSES } from '#shared/constants/enums.js';
 
 export class IncidentsService {
   constructor(incidentsRepository) {
@@ -108,6 +109,8 @@ export class IncidentsService {
       severity: body.severity,
       description: body.description,
       trafficStatus: body.trafficStatus,
+      status: INCIDENT_STATUSES.VERIFIED, // Automatically mark as verified when created by a moderator/admin
+      verifiedAt: new Date(),
     });
   }
 
@@ -135,6 +138,30 @@ export class IncidentsService {
       notes: body.notes,
       oldValues,
       newValues,
+    });
+
+    return updatedIncident;
+  }
+
+  async closeIncident(id, userInfo) {
+    const existingIncident = await this.repo.findById(id);
+    if (!existingIncident) {
+      throw new NotFoundError('Incident not found');
+    }
+
+    if (existingIncident.status === INCIDENT_STATUSES.CLOSED) {
+      throw new BadRequestError('Incident is already closed');
+    }
+
+    const updatedIncident = await this.repo.updateWithStatusHistory(id, {
+      status: INCIDENT_STATUSES.CLOSED,
+      trafficStatus: INCIDENT_STATUSES.CLOSED,
+      resolvedAt: new Date(),
+      oldStatus: existingIncident.trafficStatus,
+      changedBy: userInfo.id,
+      notes: 'Closed incident',
+      oldValues: { status: existingIncident.status },
+      newValues: { status: INCIDENT_STATUSES.CLOSED },
     });
 
     return updatedIncident;

@@ -11,6 +11,7 @@ export class IncidentsRepository {
       locationLng: true,
       area: true,
       type: true,
+      status: true,
       severity: true,
       description: true,
       trafficStatus: true,
@@ -72,6 +73,8 @@ export class IncidentsRepository {
         severity: data.severity,
         description: data.description,
         trafficStatus: data.trafficStatus,
+        status: data.status,
+        verifiedAt: data.verifiedAt,
       },
       select: this._baseSelect(),
     });
@@ -157,10 +160,12 @@ export class IncidentsRepository {
         data: {
           severity: data.severity,
           description: data.description,
+          status: data.status,
           trafficStatus: data.trafficStatus,
           locationLat: data.locationLat,
           locationLng: data.locationLng,
           type: data.type,
+          resolvedAt: data.resolvedAt,
         },
         select: this._baseSelect(),
       });

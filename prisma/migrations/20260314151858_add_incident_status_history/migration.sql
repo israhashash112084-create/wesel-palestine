@@ -5,20 +5,29 @@
 
 */
 -- CreateEnum
-CREATE TYPE "IncidentStatus" AS ENUM ('pending', 'verified');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'IncidentStatus'
+  ) THEN
+    CREATE TYPE "IncidentStatus" AS ENUM ('pending', 'verified');
+  END IF;
+END
+$$;
 
 -- DropIndex
-DROP INDEX "idx_incident_status_history_changed_at";
+DROP INDEX IF EXISTS "idx_incident_status_history_changed_at";
 
 -- DropIndex
-DROP INDEX "idx_incident_status_history_changed_by";
+DROP INDEX IF EXISTS "idx_incident_status_history_changed_by";
 
 -- DropIndex
-DROP INDEX "idx_incident_status_history_incident_id";
+DROP INDEX IF EXISTS "idx_incident_status_history_incident_id";
 
 -- DropIndex
-DROP INDEX "idx_traffic_status";
+DROP INDEX IF EXISTS "idx_traffic_status";
 
 -- AlterTable
-ALTER TABLE "incident_status_history" DROP COLUMN "changed_at",
-ADD COLUMN     "changedAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE IF EXISTS "incident_status_history"
+  DROP COLUMN IF EXISTS "changed_at",
+  ADD COLUMN IF NOT EXISTS "changedAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP;
