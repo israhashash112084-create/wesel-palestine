@@ -28,3 +28,9 @@ export const reportSubmitLimiter = createRateLimiter({
   windowSec: parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 1000,
   message:   `You can only submit ${env.RATE_LIMIT_MAX_REQUESTS} reports every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
+
+export const routeEstimateLimiter = createRateLimiter({
+  max:       parseInt(env.ROUTE_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 1000,
+  message:   `Too many route requests. You can only request ${env.ROUTE_LIMIT_MAX_REQUESTS} routes every ${parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
