@@ -49,6 +49,25 @@ export class IncidentsRepository {
     );
   }
 
+  async create(data) {
+    const incident = await prisma.incidents.create({
+      data: {
+        checkpointId: data.checkpointId,
+        reportedBy: data.reportedBy,
+        locationLat: data.locationLat,
+        locationLng: data.locationLng,
+        area: data.area,
+        type: data.type,
+        severity: data.severity,
+        description: data.description,
+        trafficStatus: data.trafficStatus,
+      },
+      select: this._baseSelect(),
+    });
+
+    return this._removeNullValues(incident);
+  }
+
   async findMany() {
     const incidents = await prisma.incidents.findMany({
       orderBy: { createdAt: 'desc' },

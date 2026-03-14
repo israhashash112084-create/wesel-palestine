@@ -16,23 +16,30 @@ datasource db {
 
 model User {
   @@map("users")
+
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
   email     String   @unique
   passwordHash  String   @db.VarChar(255) @map("password_hash")
+
   firstName String   @db.VarChar(50) @map("first_name")
   lastName  String   @db.VarChar(50) @map("last_name")
+
   role      Role     @default(user)
   confidenceScore Float    @default(0.0) @map("confidence_score")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
   checkpoints Checkpoints[]
   refreshTokens RefreshToken[]
+  statusHistory IncidentStatusHistory[]
+
   reports             Report[]             @relation("UserReports")
   reportVotes         ReportVote[]         @relation("UserVotes")
   moderationAuditLogs ModerationAuditLog[] @relation("ModerationAuditModerator")
   reportedIncidents   Incidents[]          @relation("IncidentReporter")
   verifiedIncidents   Incidents[]          @relation("IncidentVerifier")
-
 }
 
 enum Role {
@@ -116,39 +123,57 @@ enum ReportStatus {
 }
 
 model Incidents {
-  id           Int              @id @default(autoincrement())
-  checkpointId Int?             @map("checkpoint_id")
+  id           Int             @id @default(autoincrement())
+  checkpointId Int?            @map("checkpoint_id")
   reportedBy   String          @map("reported_by") @db.Uuid
-  VerifiedBy   String?          @map("verified_by") @db.Uuid
+  VerifiedBy   String?         @map("verified_by") @db.Uuid
 
-  locationLat Decimal @map("location_lat") @db.Decimal(10, 8)
-  locationLng Decimal @map("location_lng") @db.Decimal(11, 8)
-  area        String? @db.VarChar(255)
+  locationLat Decimal          @map("location_lat") @db.Decimal(10, 8)
+  locationLng Decimal          @map("location_lng") @db.Decimal(11, 8)
+  area        String?          @db.VarChar(255)
 
   type        IncidentType
   severity    IncidentSeverity
   description String?          @db.Text
-  trafficStatus    TrafficStatus @default(unknown) @map("traffic_status")
 
-  verifiedAt DateTime? @map("verified_at")
-  resolvedAt DateTime? @map("resolved_at")
+  verifiedAt DateTime?         @map("verified_at")
+  resolvedAt DateTime?         @map("resolved_at")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
 
-  checkpoint Checkpoints? @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
-  reporter   User        @relation("IncidentReporter", fields: [reportedBy], references: [id], onDelete: Cascade)
-  verifier   User?       @relation("IncidentVerifier", fields: [VerifiedBy], references: [id], onDelete: SetNull)
+  checkpoint Checkpoints?      @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
+  reporter   User              @relation("IncidentReporter", fields: [reportedBy], references: [id], onDelete: Cascade)
+  verifier   User?             @relation("IncidentVerifier", fields: [VerifiedBy], references: [id], onDelete: SetNull)
+
+  statusHistory IncidentStatusHistory[]
 
   @@index([checkpointId],          map: "idx_incidents_checkpoint_id")
   @@index([type],                  map: "idx_incidents_type")
   @@index([severity],              map: "idx_incidents_severity")
-  @@index([trafficStatus],                map: "idx_traffic_status")
   @@index([reportedBy],            map: "idx_incidents_reported_by")
-  @@index([VerifiedBy],             map: "idx_incidents_verified_by")
+  @@index([VerifiedBy],            map: "idx_incidents_verified_by")
   @@index([createdAt(sort: Desc)], map: "idx_incidents_created_at")
   @@map("incidents")
 }
+
+model IncidentStatusHistory {
+  @@map("incident_status_history")
+
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  incidentId Int              @map("incident_id")
+  changedBy  String           @db.Uuid @map("changed_by")
+
+  oldStatus  TrafficStatus    @map("old_status")
+  newStatus  TrafficStatus    @map("new_status")
+
+  changedAt  DateTime         @default(now()) @db.Timestamptz(6)
+  notes      String?
+
+  incident   Incidents        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [changedBy], references: [id], onDelete: Cascade)
+}
+
 
 enum IncidentType {
   closure
