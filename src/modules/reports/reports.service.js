@@ -37,13 +37,6 @@ export class ReportsService {
 
         const isModerator = this._isModerator(userInfo);
         const isOwner = userInfo.id === report.userId;
-        if (report.duplicateOf !== null) {
-            return {
-                voteGuide: {
-                    note: `This is a duplicate report. Vote on the original: POST /api/v1/reports/${report.duplicateOf}/vote`,
-                },
-            };
-        }
 
         if (isModerator || isOwner || report.status === REPORT_STATUSES.VERIFIED) {
             return {};
@@ -103,11 +96,8 @@ export class ReportsService {
 
         if (filters.status) {
 
-            if (filters.status === REPORT_STATUSES.REJECTED && !isModerator) {
-                throw new ForbiddenError('You are not allowed to view rejected reports');
-            }
-            if (filters.status === REPORT_STATUSES.VERIFIED && !isModerator) {
-                throw new ForbiddenError('You are not allowed to view VERIFIED reports');
+            if (!isModerator && filters.status !== REPORT_STATUSES.PENDING) {
+                throw new ForbiddenError('You are not allowed to view reports with this status');
             }
 
             statusFilter = filters.status;
@@ -116,7 +106,7 @@ export class ReportsService {
 
             statusFilter = isModerator
                 ? undefined
-                : { in: [REPORT_STATUSES.PENDING, REPORT_STATUSES.VERIFIED] };
+                : { in: [REPORT_STATUSES.PENDING] };
         }
 
         const { reports, total } = await this.repo.findMany({
@@ -150,12 +140,10 @@ export class ReportsService {
         const isModerator = this._isModerator(userInfo);
         const isOwner = userInfo?.id === report.userId;
 
-        if (
-            report.status === REPORT_STATUSES.REJECTED &&
-            !isModerator &&
-            !isOwner
-        ) {
-            throw new NotFoundError('Report');
+        if (!isModerator && !isOwner) {
+            if (report.status !== REPORT_STATUSES.PENDING || report.duplicateOf !== null) {
+                throw new NotFoundError('Report');
+            }
         }
 
         const response = { ...report };
