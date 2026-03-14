@@ -33,4 +33,6 @@ export const estimateRouteSchema = Joi.object({
   avoid_checkpoints: Joi.array()
     .items(Joi.number().integer().positive())
     .default([]),
+
+    include_geometry:  Joi.boolean().default(true), 
 });
