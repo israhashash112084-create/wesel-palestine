@@ -48,5 +48,15 @@ export class ReportsController {
             res.status(200).json({ success: true, data: result });
         } catch (err) { next(err); }
     };
+    moderateReport = async (req, res, next) => {
+        try {
+            const result = await this.reportsService.moderateReport(
+                parseInt(req.params.id, 10),
+                req.body,
+                req.userInfo.id
+            );
+            res.status(200).json({ success: true, data: result });
+        } catch (err) { next(err); }
+    }
 
 }
