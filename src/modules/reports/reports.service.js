@@ -219,7 +219,7 @@ export class ReportsService {
                 reason: verifyReason
             });
             await this.repo.updateMany(
-                { duplicateOf: reportId },
+                { duplicateOf: report.id },
                 { status: 'verified', moderatedAt: new Date() }
             );
             await this.repo.increaseReportOwnersScore(report.id);
@@ -239,7 +239,7 @@ export class ReportsService {
                 reason: rejectReason,
             });
             await this.repo.updateMany(
-                { duplicateOf: reportId },
+                { duplicateOf: report.id },
                 { status: 'rejected', rejectReason: reason, moderatedAt: new Date() }
             );
             await this.repo.decreaseReportOwnersScore(report.id);
