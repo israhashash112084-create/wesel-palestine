@@ -112,7 +112,6 @@ export class ReportsRepository {
   }
 
   async findMany({ status, type, area, skip, take, sortBy, sortOrder }) {
-
     const where = {
       duplicateOf: null,
     };
@@ -123,7 +122,8 @@ export class ReportsRepository {
     const [reports, total] = await prisma.$transaction([
       prisma.report.findMany({
         where,
-        orderBy: { [sortBy]: sortOrder }, skip,
+        orderBy: { [sortBy]: sortOrder },
+        skip,
         take,
         select: {
           id: true,
@@ -144,8 +144,9 @@ export class ReportsRepository {
       prisma.report.count({ where }),
     ]);
 
-    const cleanedReports = reports.map(report => {
+    const cleanedReports = reports.map((report) => {
       const filteredReport = Object.fromEntries(
+        // eslint-disable-next-line no-unused-vars
         Object.entries(report).filter(([key, value]) => value !== null)
       );
       return filteredReport;

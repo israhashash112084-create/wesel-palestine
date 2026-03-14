@@ -26,6 +26,8 @@ pool.on('error', (err) => {
 
 export const query = (text, params) => pool.query(text, params);
 
+export const prismaTransaction = (callback) => prisma.$transaction(callback);
+
 export const transaction = async (callback) => {
   const client = await pool.connect();
   try {
