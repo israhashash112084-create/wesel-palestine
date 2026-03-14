@@ -33,7 +33,7 @@ export const createIncidentSchema = Joi.object({
     .required(),
 });
 
-export const updateIncidentParamSchema = Joi.object({
+export const incidentIdParamSchema = Joi.object({
   id: Joi.number().integer().positive().required(),
 });
 

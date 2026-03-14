@@ -7,7 +7,7 @@ import { IncidentsController } from './incidents.controller.js';
 import {
   createIncidentSchema,
   updateIncidentBodySchema,
-  updateIncidentParamSchema,
+  incidentIdParamSchema,
 } from './incidents.validator.js';
 
 const router = Router();
@@ -17,6 +17,14 @@ const incidentsService = new IncidentsService(incidentsRepository);
 const incidentsController = new IncidentsController(incidentsService);
 
 router.get('/', authenticate, authorize('moderator', 'admin'), incidentsController.getAllIncidents);
+router.get(
+  '/:id',
+  authenticate,
+  validateRequest(incidentIdParamSchema, 'params'),
+  authorize('moderator', 'admin'),
+  incidentsController.getIncidentById
+);
+
 router.post(
   '/',
   authenticate,
@@ -28,7 +36,7 @@ router.patch(
   '/:id',
   authenticate,
   authorize('moderator', 'admin'),
-  validateRequest(updateIncidentParamSchema, 'params'),
+  validateRequest(incidentIdParamSchema, 'params'),
   validateRequest(updateIncidentBodySchema, 'body'),
   incidentsController.updateIncident
 );

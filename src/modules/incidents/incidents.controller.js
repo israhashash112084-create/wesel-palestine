@@ -8,6 +8,12 @@ export class IncidentsController {
     res.status(200).json({ success: true, data: incidents });
   };
 
+  getIncidentById = async (req, res) => {
+    const { id } = req.params;
+    const incident = await this.incidentService.getIncidentById(id);
+    res.status(200).json({ success: true, data: incident });
+  };
+
   createIncident = async (req, res) => {
     const result = await this.incidentService.createIncident(req.userInfo, req.body);
     res.status(201).json({ success: true, data: result });

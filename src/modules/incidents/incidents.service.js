@@ -51,6 +51,14 @@ export class IncidentsService {
     return this.repo.findMany();
   }
 
+  async getIncidentById(id) {
+    const incident = await this.repo.findById(id);
+    if (!incident) {
+      throw new NotFoundError('Incident not found');
+    }
+    return incident;
+  }
+
   async createIncident(userInfo, body) {
     const incidentLocation = { lat: body.locationLat, lng: body.locationLng };
 
