@@ -66,6 +66,7 @@ export class IncidentsRepository {
       data: {
         checkpointId: data.checkpointId,
         reportedBy: data.reportedBy,
+        VerifiedBy: data.verifiedBy,
         locationLat: data.locationLat,
         locationLng: data.locationLng,
         area: data.area,
@@ -161,6 +162,8 @@ export class IncidentsRepository {
           severity: data.severity,
           description: data.description,
           status: data.status,
+          VerifiedBy: data.verifiedBy,
+          verifiedAt: data.verifiedAt,
           trafficStatus: data.trafficStatus,
           locationLat: data.locationLat,
           locationLng: data.locationLng,

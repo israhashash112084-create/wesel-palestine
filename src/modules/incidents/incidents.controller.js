@@ -15,7 +15,7 @@ export class IncidentsController {
   };
 
   createIncident = async (req, res) => {
-    const result = await this.incidentService.createIncident(req.userInfo, req.body);
+    const result = await this.incidentService.createVerifiedIncident(req.userInfo, req.body);
     res.status(201).json({ success: true, data: result });
   };
 

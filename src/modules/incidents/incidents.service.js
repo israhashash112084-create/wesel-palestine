@@ -49,6 +49,21 @@ export class IncidentsService {
     return { oldValues, newValues };
   }
 
+  _buildIncidentCreatePayload(userInfo, body, overrides = {}) {
+    return {
+      reportedBy: userInfo.id,
+      checkpointId: body.checkpointId,
+      locationLat: body.locationLat,
+      locationLng: body.locationLng,
+      area: body.area,
+      type: body.type,
+      severity: body.severity,
+      description: body.description,
+      trafficStatus: body.trafficStatus,
+      ...overrides,
+    };
+  }
+
   async getAllIncidents(filters) {
     const {
       type,
@@ -94,23 +109,64 @@ export class IncidentsService {
     return incident;
   }
 
-  async createIncident(userInfo, body) {
-    const incidentLocation = { lat: body.locationLat, lng: body.locationLng };
-
+  async createVerifiedIncident(userInfo, body) {
     // TODO: Implement a more robust duplicate detection mechanism that considers both location and time proximity, as well as incident type and severity.
 
-    return this.repo.create({
-      reportedBy: userInfo.id,
-      checkpointId: body.checkpointId,
-      locationLat: incidentLocation.lat,
-      locationLng: incidentLocation.lng,
-      area: body.area,
-      type: body.type,
-      severity: body.severity,
-      description: body.description,
-      trafficStatus: body.trafficStatus,
-      status: INCIDENT_STATUSES.VERIFIED, // Automatically mark as verified when created by a moderator/admin
-      verifiedAt: new Date(),
+    const verifiedAt = new Date();
+
+    return this.repo.create(
+      this._buildIncidentCreatePayload(userInfo, body, {
+        status: INCIDENT_STATUSES.VERIFIED, // Automatically mark as verified when created by a moderator/admin
+        verifiedAt,
+        verifiedBy: userInfo.id,
+      })
+    );
+  }
+
+  async createIncident(userInfo, body) {
+    // TODO: Implement a more robust duplicate detection mechanism that considers both location and time proximity, as well as incident type and severity.
+
+    return this.repo.create(
+      this._buildIncidentCreatePayload(userInfo, body, {
+        status: INCIDENT_STATUSES.PENDING,
+      })
+    );
+  }
+
+  async verifyIncident(id, userInfo, notes = 'Verified incident') {
+    const existingIncident = await this.repo.findById(id);
+    if (!existingIncident) {
+      throw new NotFoundError('Incident not found');
+    }
+
+    if (existingIncident.status === INCIDENT_STATUSES.CLOSED) {
+      throw new BadRequestError('Closed incidents cannot be verified');
+    }
+
+    if (existingIncident.status === INCIDENT_STATUSES.VERIFIED) {
+      throw new BadRequestError('Incident is already verified');
+    }
+
+    const verifiedAt = new Date();
+
+    return this.repo.updateWithStatusHistory(id, {
+      status: INCIDENT_STATUSES.VERIFIED,
+      verifiedAt,
+      verifiedBy: userInfo.id,
+      trafficStatus: existingIncident.trafficStatus,
+      oldStatus: existingIncident.trafficStatus,
+      changedBy: userInfo.id,
+      notes,
+      oldValues: {
+        status: existingIncident.status,
+        verifiedAt: existingIncident.verifiedAt ?? null,
+        verifiedBy: existingIncident.verifiedBy ?? null,
+      },
+      newValues: {
+        status: INCIDENT_STATUSES.VERIFIED,
+        verifiedAt,
+        verifiedBy: userInfo.id,
+      },
     });
   }
 
