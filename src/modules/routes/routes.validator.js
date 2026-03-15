@@ -40,3 +40,8 @@ export const estimateRouteSchema = Joi.object({
 
     include_geometry:  Joi.boolean().default(true), 
 });
+
+export const routeHistorySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(20).default(10),
+});
