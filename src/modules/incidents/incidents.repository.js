@@ -6,7 +6,7 @@ export class IncidentsRepository {
       id: true,
       checkpointId: true,
       reportedBy: true,
-      VerifiedBy: true,
+      verifiedBy: true,
       locationLat: true,
       locationLng: true,
       area: true,
@@ -44,21 +44,11 @@ export class IncidentsRepository {
   }
 
   _removeNullValues(record) {
-    return Object.fromEntries(
-      // eslint-disable-next-line no-unused-vars
-      Object.entries(record).filter(([_, value]) => value !== null)
-    );
+    return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== null));
   }
 
   _normalizeRecord(record) {
-    const cleaned = this._removeNullValues(record);
-
-    if (Object.hasOwn(cleaned, 'VerifiedBy')) {
-      cleaned.verifiedBy = cleaned.VerifiedBy;
-      delete cleaned.VerifiedBy;
-    }
-
-    return cleaned;
+    return this._removeNullValues(record);
   }
 
   async create(data) {
@@ -66,7 +56,7 @@ export class IncidentsRepository {
       data: {
         checkpointId: data.checkpointId,
         reportedBy: data.reportedBy,
-        VerifiedBy: data.verifiedBy,
+        verifiedBy: data.verifiedBy,
         locationLat: data.locationLat,
         locationLng: data.locationLng,
         area: data.area,
@@ -162,7 +152,7 @@ export class IncidentsRepository {
           severity: data.severity,
           description: data.description,
           status: data.status,
-          VerifiedBy: data.verifiedBy,
+          verifiedBy: data.verifiedBy,
           verifiedAt: data.verifiedAt,
           trafficStatus: data.trafficStatus,
           locationLat: data.locationLat,
@@ -189,5 +179,64 @@ export class IncidentsRepository {
     });
 
     return this._normalizeRecord(updatedIncident);
+  }
+
+  _normalizeHistoryRecord(record) {
+    return {
+      id: record.id,
+      actor: {
+        id: record.user.id,
+        firstName: record.user.firstName,
+        lastName: record.user.lastName,
+      },
+      before: {
+        status: record.oldStatus,
+        values: record.oldValues ?? {},
+      },
+      after: {
+        status: record.newStatus,
+        values: record.newValues ?? {},
+      },
+      notes: record.notes ?? null,
+      timestamp: record.changedAt,
+    };
+  }
+
+  async findStatusHistory(incidentId, { skip, take, sortBy, sortOrder }) {
+    const { records, total } = await prismaTransaction(async (tx) => {
+      const records = await tx.incidentStatusHistory.findMany({
+        where: { incidentId },
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take,
+        select: {
+          id: true,
+          oldStatus: true,
+          newStatus: true,
+          notes: true,
+          oldValues: true,
+          newValues: true,
+          changedAt: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      });
+
+      const total = await tx.incidentStatusHistory.count({
+        where: { incidentId },
+      });
+
+      return { records, total };
+    });
+
+    return {
+      history: records.map((record) => this._normalizeHistoryRecord(record)),
+      total,
+    };
   }
 }

@@ -126,7 +126,7 @@ model Incidents {
   id           Int             @id @default(autoincrement())
   checkpointId Int?            @map("checkpoint_id")
   reportedBy   String          @map("reported_by") @db.Uuid
-  VerifiedBy   String?         @map("verified_by") @db.Uuid
+  verifiedBy   String?         @map("verified_by") @db.Uuid
 
   locationLat Decimal          @map("location_lat") @db.Decimal(10, 8)
   locationLng Decimal          @map("location_lng") @db.Decimal(11, 8)
@@ -146,7 +146,7 @@ model Incidents {
 
   checkpoint Checkpoints?      @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
   reporter   User              @relation("IncidentReporter", fields: [reportedBy], references: [id], onDelete: Cascade)
-  verifier   User?             @relation("IncidentVerifier", fields: [VerifiedBy], references: [id], onDelete: SetNull)
+  verifier   User?             @relation("IncidentVerifier", fields: [verifiedBy], references: [id], onDelete: SetNull)
 
   statusHistory IncidentStatusHistory[]
 
@@ -154,7 +154,7 @@ model Incidents {
   @@index([type],                  map: "idx_incidents_type")
   @@index([severity],              map: "idx_incidents_severity")
   @@index([reportedBy],            map: "idx_incidents_reported_by")
-  @@index([VerifiedBy],            map: "idx_incidents_verified_by")
+  @@index([verifiedBy],            map: "idx_incidents_verified_by")
   @@index([createdAt(sort: Desc)], map: "idx_incidents_created_at")
   @@map("incidents")
 }
@@ -169,7 +169,7 @@ model IncidentStatusHistory {
   oldStatus  TrafficStatus    @map("old_status")
   newStatus  TrafficStatus    @map("new_status")
 
-  changedAt  DateTime         @default(now()) @db.Timestamptz(6)
+  changedAt  DateTime         @default(now()) @db.Timestamptz(6) @map("changed_at")
   notes      String?
   oldValues  Json?            @map("old_values")
   newValues  Json?            @map("new_values")

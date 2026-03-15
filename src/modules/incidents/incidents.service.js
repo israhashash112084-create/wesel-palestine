@@ -1,6 +1,6 @@
 import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
-import { INCIDENT_STATUSES } from '#shared/constants/enums.js';
+import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
 
 export class IncidentsService {
   constructor(incidentsRepository) {
@@ -211,7 +211,7 @@ export class IncidentsService {
 
     const updatedIncident = await this.repo.updateWithStatusHistory(id, {
       status: INCIDENT_STATUSES.CLOSED,
-      trafficStatus: INCIDENT_STATUSES.CLOSED,
+      trafficStatus: TRAFFIC_STATUSES.CLOSED,
       resolvedAt: new Date(),
       oldStatus: existingIncident.trafficStatus,
       changedBy: userInfo.id,
@@ -237,5 +237,28 @@ export class IncidentsService {
         reportedBy: 'user1',
       },
     ];
+  }
+
+  async getIncidentHistory(incidentId, filters) {
+    const incident = await this.repo.findById(incidentId);
+    if (!incident) {
+      throw new NotFoundError('Incident not found');
+    }
+
+    const { page, limit, sortBy, sortOrder } = filters;
+    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+
+    const { history, total } = await this.repo.findStatusHistory(incidentId, {
+      skip,
+      take,
+      sortBy,
+      sortOrder,
+    });
+
+    return {
+      incidentId: Number(incidentId),
+      history,
+      pagination: buildPaginationMeta(total),
+    };
   }
 }
