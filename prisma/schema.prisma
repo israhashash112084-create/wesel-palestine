@@ -31,6 +31,7 @@ model User {
   reportVotes         ReportVote[]         @relation("UserVotes")
   moderationAuditLogs ModerationAuditLog[] @relation("ModerationAuditModerator")
   reportedIncidents   Incidents[]          @relation("IncidentReporter")
+  routeHistory RouteHistory[]
 
 }
 
@@ -266,4 +267,28 @@ model ExternalApiLog {
   @@index([isFallback])
   @@index([createdAt(sort: Desc)])
   @@map("external_api_logs")
+}
+
+model RouteHistory {
+  id                   Int      @id @default(autoincrement())
+  userId               String   @db.Uuid @map("user_id")
+
+  fromLat              Decimal  @db.Decimal(10, 8) @map("from_lat")
+  fromLng              Decimal  @db.Decimal(11, 8) @map("from_lng")
+  toLat                Decimal  @db.Decimal(10, 8) @map("to_lat")
+  toLng                Decimal  @db.Decimal(11, 8) @map("to_lng")
+
+  distanceKm           Decimal  @db.Decimal(8, 2) @map("distance_km")
+  baseDurationMinutes  Decimal  @db.Decimal(8, 2) @map("base_duration_minutes")
+  finalDurationMinutes Decimal  @db.Decimal(8, 2) @map("final_duration_minutes")
+  totalDelayMinutes    Int      @map("total_delay_minutes")
+
+  isFallback           Boolean  @default(false) @map("is_fallback")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_route_history_user_id")
+  @@index([createdAt(sort: Desc)], map: "idx_route_history_created_at")
+  @@map("route_history")
 }
