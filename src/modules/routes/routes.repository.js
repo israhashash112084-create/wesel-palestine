@@ -91,4 +91,43 @@ export class RoutesRepository {
       },
     });
   }
+
+  async saveRouteHistory(data) {
+  return prisma.routeHistory.create({
+    data: {
+      userId: data.userId,
+
+      fromLat: data.fromLat,
+      fromLng: data.fromLng,
+      toLat: data.toLat,
+      toLng: data.toLng,
+
+      distanceKm: data.distanceKm,
+      baseDurationMinutes: data.baseDurationMinutes,
+      finalDurationMinutes: data.finalDurationMinutes,
+      totalDelayMinutes: data.totalDelayMinutes,
+
+      isFallback: data.isFallback ?? false,
+    },
+  });
+}
+
+async findUserRouteHistory(userId, { skip, take }) {
+  return prisma.routeHistory.findMany({
+    where: { userId },
+
+    orderBy: {
+      createdAt: 'desc',
+    },
+
+    skip,
+    take,
+  });
+}
+
+async countUserRouteHistory(userId) {
+  return prisma.routeHistory.count({
+    where: { userId },
+  });
+}
 }
