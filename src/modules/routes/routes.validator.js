@@ -34,5 +34,9 @@ export const estimateRouteSchema = Joi.object({
     .items(Joi.number().integer().positive())
     .default([]),
 
+  avoid_areas: Joi.array()         
+    .items(Joi.string().trim().min(2))
+    .default([]),
+
     include_geometry:  Joi.boolean().default(true), 
 });

@@ -38,11 +38,27 @@ const AVERAGE_SPEED_KMH   = 60;
 const _distanceBetween = (lat1, lng1, lat2, lng2) =>
   _haversine({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });*/
 
-const _buildCacheKey = (from, to, avoidCheckpoints) => {
+
+const _normalizeArea = (value) => (value ?? '').trim().toLowerCase();
+
+const _isAreaAvoided = (area, avoidAreas) =>
+  avoidAreas.map(_normalizeArea).includes(_normalizeArea(area));
+
+/*const _buildCacheKey = (from, to, avoidCheckpoints) => {
   const raw = `${from.lat},${from.lng}|${to.lat},${to.lng}|${[...avoidCheckpoints].sort().join(',')}`;
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 64);
-};
+};*/
 
+const _buildCacheKey = (from, to, avoidCheckpoints, avoidAreas) => {
+  const raw = [
+    `${from.lat},${from.lng}`,
+    `${to.lat},${to.lng}`,
+    [...avoidCheckpoints].sort((a, b) => a - b).join(','),
+    [...avoidAreas].map((a) => a.trim().toLowerCase()).sort().join(','),
+  ].join('|');
+
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 64);
+};
 
 export class RoutesService {
 
@@ -50,13 +66,13 @@ export class RoutesService {
     this.routesRepository = routesRepository;
   }
 
-  async estimateRoute({ from, to, avoid_checkpoints, include_geometry }) {
+  async estimateRoute({ from, to, avoid_checkpoints ,avoid_areas, include_geometry }) {
 
     if (from.lat === to.lat && from.lng === to.lng) {
       throw new BadRequestError('Origin and destination cannot be the same');
     }
 
-    const cacheKey = _buildCacheKey(from, to, avoid_checkpoints);
+    const cacheKey = _buildCacheKey(from, to, avoid_checkpoints, avoid_areas);
     const cached   = await this.routesRepository.findCache(cacheKey);
     if (cached) {
       await this.routesRepository.incrementCacheHit(cacheKey);
@@ -149,7 +165,7 @@ export class RoutesService {
     const factors         = [];
     const warnings        = [];
 
-    for (const cp of checkpointsOnRoute) {
+    /*for (const cp of checkpointsOnRoute) {
       const isAvoided = avoid_checkpoints.includes(cp.id);
       const delay     = isAvoided ? 0 : (DELAY_CHECKPOINT[cp.status] ?? 0);
 
@@ -165,9 +181,34 @@ export class RoutesService {
       if (!isAvoided && cp.status === CHECKPOINT_STATUSES.CLOSED) {
         warnings.push(`Checkpoint "${cp.name}" is closed`);
       }
-    }
+    }*/
 
-    for (const inc of incidentsOnRoute) {
+  for (const cp of checkpointsOnRoute) {
+    const isAvoidedCheckpoint = avoid_checkpoints.includes(cp.id);
+    const isAvoidedArea       = _isAreaAvoided(cp.areaName, avoid_areas);
+    const isAvoided           = isAvoidedCheckpoint || isAvoidedArea;
+    const delay               = isAvoided ? 0 : (DELAY_CHECKPOINT[cp.status] ?? 0);
+
+    totalDelayMinutes += delay;
+
+    factors.push({
+     type:         'checkpoint',
+     name:         cp.name,
+     status:       cp.status,
+     area:         cp.areaName ?? null,
+     delayMinutes: delay,
+     avoided:      isAvoided,
+     avoidedBy:    isAvoidedCheckpoint ? 'checkpoint'
+                : isAvoidedArea       ? 'area'
+                : null,
+  });
+
+  if (!isAvoided && cp.status === CHECKPOINT_STATUSES.CLOSED) {
+    warnings.push(`Checkpoint "${cp.name}" is closed`);
+  }
+}
+
+    /*for (const inc of incidentsOnRoute) {
       const delay = DELAY_INCIDENT[inc.severity] ?? 0;
       totalDelayMinutes += delay;
       factors.push({
@@ -176,7 +217,24 @@ export class RoutesService {
         severity:     inc.severity,
         delayMinutes: delay,
       });
-    }
+    }*/
+
+    for (const inc of incidentsOnRoute) {
+  const isAvoidedArea = _isAreaAvoided(inc.area, avoid_areas);
+  const delay         = isAvoidedArea ? 0 : (DELAY_INCIDENT[inc.severity] ?? 0);
+
+  totalDelayMinutes += delay;
+
+  factors.push({
+    type:         'incident',
+    incidentType: inc.type,
+    severity:     inc.severity,
+    area:         inc.area ?? null,
+    delayMinutes: delay,
+    avoided:      isAvoidedArea,
+    avoidedBy:    isAvoidedArea ? 'area' : null,
+  });
+}
 
     if (weather?.isHazardous) {
       totalDelayMinutes += DELAY_WEATHER;

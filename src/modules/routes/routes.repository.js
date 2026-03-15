@@ -54,6 +54,7 @@ export class RoutesRepository {
         latitude:  true,
         longitude: true,
         status:    true,
+        areaName:  true,
       },
     });
   }
