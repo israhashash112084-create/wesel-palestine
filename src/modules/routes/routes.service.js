@@ -4,6 +4,7 @@ import { getWeather } from '#integrations/weather/weather.client.js';
 import { API_SERVICES, CHECKPOINT_STATUSES, INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
 import { BadRequestError } from '#shared/utils/errors.js';
 import { haversine, distanceBetween } from '#shared/utils/geo.js';
+import { getPaginationParams } from '#shared/utils/pagination.js';
 
 const CACHE_TTL_CLEAR_MS    = 60 * 60 * 1000;
 const CACHE_TTL_INCIDENT_MS = 10 * 60 * 1000;
@@ -76,7 +77,7 @@ export class RoutesService {
     this.routesRepository = routesRepository;
   }
 
-  async estimateRoute({ from, to, avoid_checkpoints ,avoid_areas, include_geometry }) {
+  async estimateRoute({ from, to, avoid_checkpoints ,avoid_areas, include_geometry }, userId) {
 
     if (from.lat === to.lat && from.lng === to.lng) {
       throw new BadRequestError('Origin and destination cannot be the same');
@@ -87,7 +88,26 @@ export class RoutesService {
     if (cached) {
       await this.routesRepository.incrementCacheHit(cacheKey);
       //return { ...cached.responseData, fromCache: true };
-       return _formatRouteResponse(cached.responseData, true);
+      const formattedResponse = _formatRouteResponse(cached.responseData, true);
+
+      await this.routesRepository.saveRouteHistory({
+       userId,
+
+       fromLat: from.lat,
+       fromLng: from.lng,
+       toLat: to.lat,
+       toLng: to.lng,
+
+       distanceKm: formattedResponse.summary.distanceKm,
+       baseDurationMinutes: formattedResponse.summary.baseDurationMinutes,
+       finalDurationMinutes: formattedResponse.summary.finalDurationMinutes,
+       totalDelayMinutes: formattedResponse.summary.totalDelayMinutes,
+
+       isFallback: formattedResponse.summary.isFallback,
+     });
+
+      return formattedResponse;
+     //  return _formatRouteResponse(cached.responseData, true);
     }
 
     const [allCheckpoints, allIncidents] = await Promise.all([
@@ -312,7 +332,56 @@ export class RoutesService {
       expiresAt,
     });
 
+  await this.routesRepository.saveRouteHistory({
+    userId,
+
+    fromLat: from.lat,
+    fromLng: from.lng,
+    toLat: to.lat,
+    toLng: to.lng,
+
+    distanceKm: responseData.summary.distanceKm,
+    baseDurationMinutes: responseData.summary.baseDurationMinutes,
+    finalDurationMinutes: responseData.summary.finalDurationMinutes,
+    totalDelayMinutes: responseData.summary.totalDelayMinutes,
+
+    isFallback: responseData.summary.isFallback,});
+
    // return { ...responseData, fromCache: false };
     return _formatRouteResponse(responseData, false);
+  }
+
+  async getRouteHistory(query, userId) {
+   const { page, limit } = query;
+
+   const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+
+   const [routes, total] = await Promise.all([
+     this.routesRepository.findUserRouteHistory(userId, { skip, take }),
+     this.routesRepository.countUserRouteHistory(userId),
+  ]);
+
+   const formattedRoutes = routes.map((route) => ({
+     id: route.id,
+     from: {
+      lat: Number(route.fromLat),
+      lng: Number(route.fromLng),
+    },
+     to: {
+      lat: Number(route.toLat),
+      lng: Number(route.toLng),
+    },
+     distanceKm: Number(route.distanceKm),
+     baseDurationMinutes: Number(route.baseDurationMinutes),
+     finalDurationMinutes: Number(route.finalDurationMinutes),
+     totalDelayMinutes: route.totalDelayMinutes,
+     isFallback: route.isFallback,
+     createdAt: route.createdAt,
+  }));
+
+   return {
+    routes: formattedRoutes,
+    pagination: buildPaginationMeta(total),
+    };
   }
 }
