@@ -60,6 +60,16 @@ const _buildCacheKey = (from, to, avoidCheckpoints, avoidAreas) => {
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 64);
 };
 
+const _formatRouteResponse = (data, fromCache = false) => ({
+  summary: {
+    ...data.summary,
+    fromCache,
+  },
+  route: data.route,
+  conditions: data.conditions,
+  impact: data.impact,
+});
+
 export class RoutesService {
 
   constructor(routesRepository) {
@@ -76,7 +86,8 @@ export class RoutesService {
     const cached   = await this.routesRepository.findCache(cacheKey);
     if (cached) {
       await this.routesRepository.incrementCacheHit(cacheKey);
-      return { ...cached.responseData, fromCache: true };
+      //return { ...cached.responseData, fromCache: true };
+       return _formatRouteResponse(cached.responseData, true);
     }
 
     const [allCheckpoints, allIncidents] = await Promise.all([
@@ -220,19 +231,19 @@ export class RoutesService {
     }*/
 
     for (const inc of incidentsOnRoute) {
-  const isAvoidedArea = _isAreaAvoided(inc.area, avoid_areas);
-  const delay         = isAvoidedArea ? 0 : (DELAY_INCIDENT[inc.severity] ?? 0);
+     const isAvoidedArea = _isAreaAvoided(inc.area, avoid_areas);
+     const delay         = isAvoidedArea ? 0 : (DELAY_INCIDENT[inc.severity] ?? 0);
 
-  totalDelayMinutes += delay;
+     totalDelayMinutes += delay;
 
-  factors.push({
-    type:         'incident',
-    incidentType: inc.type,
-    severity:     inc.severity,
-    area:         inc.area ?? null,
-    delayMinutes: delay,
-    avoided:      isAvoidedArea,
-    avoidedBy:    isAvoidedArea ? 'area' : null,
+     factors.push({
+      type:         'incident',
+      incidentType: inc.type,
+      severity:     inc.severity,
+      area:         inc.area ?? null,
+      delayMinutes: delay,
+      avoided:      isAvoidedArea,
+      avoidedBy:    isAvoidedArea ? 'area' : null,
   });
 }
 
@@ -253,20 +264,43 @@ export class RoutesService {
     const ttl       = hasIncidents ? CACHE_TTL_INCIDENT_MS : CACHE_TTL_CLEAR_MS;
     const expiresAt = new Date(Date.now() + ttl);
 
+    
+    const finalDuration = parseFloat((durationMinutes + totalDelayMinutes).toFixed(2));
     const responseData = {
-      distanceKm,
-      durationMinutes:     parseFloat((durationMinutes + totalDelayMinutes).toFixed(2)),
-      baseDurationMinutes: parseFloat(durationMinutes.toFixed(2)),
-      totalDelayMinutes,
-      isFallback,
-      factors,
-      warnings,
-      weather: weather ? {
-        condition:   weather.condition,
-        description: weather.description,
-      } : null,
-      geometry: include_geometry ? geometry : null,
-    };
+      summary: {
+       distanceKm,
+       baseDurationMinutes: parseFloat(durationMinutes.toFixed(2)),
+       totalDelayMinutes,
+       finalDurationMinutes: finalDuration,
+       isFallback,
+     },
+
+      route: {
+        from,
+        to,
+        geometry: include_geometry ? geometry : {},
+     },
+
+      conditions: {
+        weather: weather
+        ? {
+          condition: weather.condition,
+          description: weather.description,
+        }
+        : null,
+       warnings,
+     },
+
+      impact: {
+        counts: {
+          checkpoints: factors.filter((f) => f.type === 'checkpoint').length,
+          incidents: factors.filter((f) => f.type === 'incident').length,
+          totalFactors: factors.length,
+        },
+       factors,
+     },
+  };
+  
 
     await this.routesRepository.saveCache({
       cacheKey,
@@ -278,6 +312,7 @@ export class RoutesService {
       expiresAt,
     });
 
-    return { ...responseData, fromCache: false };
+   // return { ...responseData, fromCache: false };
+    return _formatRouteResponse(responseData, false);
   }
 }
