@@ -39,7 +39,7 @@ model User {
   reportVotes         ReportVote[]         @relation("UserVotes")
   moderationAuditLogs ModerationAuditLog[] @relation("ModerationAuditModerator")
   reportedIncidents   Incidents[]          @relation("IncidentReporter")
-  verifiedIncidents   Incidents[]          @relation("IncidentVerifier")
+  moderadedIncidents   Incidents[]          @relation("IncidentModerad")
 }
 
 enum Role {
@@ -84,11 +84,12 @@ model RefreshToken {
 model Report {
   id              Int          @id @default(autoincrement())
   userId          String?      @map("user_id") @db.Uuid
+  incidentId      Int?         @map("incident_id")
   locationLat     Decimal      @map("location_lat") @db.Decimal(10, 8)
   locationLng     Decimal      @map("location_lng") @db.Decimal(11, 8)
   area            String?      @db.VarChar(255)
   type            IncidentType
-  severity        IncidentSeverity  @default(low)
+  severity        IncidentSeverity @default(low)
   description     String       @db.Text
   confidenceScore Int          @default(0) @map("confidence_score")
   status          ReportStatus @default(pending)
@@ -97,22 +98,25 @@ model Report {
   rejectReason    String?      @map("reject_reason") @db.Text
   duplicateOf     Int?         @map("duplicate_of")
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6) 
 
   original   Report?  @relation("ReportDuplicates", fields: [duplicateOf], references: [id], onDelete: SetNull)
   duplicates Report[] @relation("ReportDuplicates")
 
   user      User? @relation("UserReports", fields: [userId], references: [id], onDelete: SetNull)
+  incident  Incidents? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
 
   votes     ReportVote[]
   auditLogs ModerationAuditLog[]
 
+  @@index([incidentId])
   @@index([userId], map: "idx_reports_user_id")
   @@index([status], map: "idx_reports_status")
   @@index([type], map: "idx_reports_type")
   @@index([duplicateOf], map: "idx_reports_duplicate_of")
   @@index([locationLat, locationLng], map: "idx_reports_location")
   @@index([createdAt], map: "idx_reports_created_at")
+
   @@map("reports")
 }
 
@@ -125,20 +129,23 @@ enum ReportStatus {
 model Incidents {
   id           Int             @id @default(autoincrement())
   checkpointId Int?            @map("checkpoint_id")
+
   reportedBy   String          @map("reported_by") @db.Uuid
-  VerifiedBy   String?         @map("verified_by") @db.Uuid
+  moderadedBy   String?         @map("moderade_by") @db.Uuid
 
   locationLat Decimal          @map("location_lat") @db.Decimal(10, 8)
   locationLng Decimal          @map("location_lng") @db.Decimal(11, 8)
+
   area        String?          @db.VarChar(255)
 
   type        IncidentType
   severity    IncidentSeverity
   description String?          @db.Text
+
   trafficStatus TrafficStatus  @default(unknown) @map("traffic_status")
   status      IncidentStatus   @default(pending)
 
-  verifiedAt DateTime?         @map("verified_at")
+  moderadeddAt DateTime?         @map("moderaded_at")
   resolvedAt DateTime?         @map("resolved_at")
 
   createdAt DateTime           @default(now()) @map("created_at")
@@ -146,16 +153,19 @@ model Incidents {
 
   checkpoint Checkpoints?      @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
   reporter   User              @relation("IncidentReporter", fields: [reportedBy], references: [id], onDelete: Cascade)
-  verifier   User?             @relation("IncidentVerifier", fields: [VerifiedBy], references: [id], onDelete: SetNull)
+  moderad   User?             @relation("IncidentModerad", fields: [moderadedBy], references: [id], onDelete: SetNull)
+
+  reports Report[] 
 
   statusHistory IncidentStatusHistory[]
 
-  @@index([checkpointId],          map: "idx_incidents_checkpoint_id")
-  @@index([type],                  map: "idx_incidents_type")
-  @@index([severity],              map: "idx_incidents_severity")
-  @@index([reportedBy],            map: "idx_incidents_reported_by")
-  @@index([VerifiedBy],            map: "idx_incidents_verified_by")
+  @@index([checkpointId], map: "idx_incidents_checkpoint_id")
+  @@index([type], map: "idx_incidents_type")
+  @@index([severity], map: "idx_incidents_severity")
+  @@index([reportedBy], map: "idx_incidents_reported_by")
+  @@index([moderadedBy], map: "idx_incidents_verified_by")
   @@index([createdAt(sort: Desc)], map: "idx_incidents_created_at")
+
   @@map("incidents")
 }
 
