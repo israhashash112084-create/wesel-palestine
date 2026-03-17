@@ -6,7 +6,7 @@ commit_msg=$(cat "$1")
 # scope is optional, description must be non-empty
 pattern="^(feat|fix|docs|refactor|test|chore)(\(.+\))?: .+"
 
-if ! echo "$commit_msg" | grep -qE "$pattern"; then
+if ! echo "$commit_msg" | grep -qE "$pattern" && ! echo "$commit_msg" | grep -q "Merge"; then
   echo ""
   echo "  Invalid commit message format."
   echo ""
