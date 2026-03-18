@@ -1,10 +1,12 @@
 import crypto from 'crypto';
-import { getOsrmRoute } from '#integrations/routing/osrm.client.js';
+import { getOsrmRoutes , getOsrmRouteViaWaypoint} from '#integrations/routing/osrm.client.js';
 import { getWeather } from '#integrations/weather/weather.client.js';
 import { API_SERVICES, CHECKPOINT_STATUSES, INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
 import { BadRequestError } from '#shared/utils/errors.js';
-import { haversine, distanceBetween } from '#shared/utils/geo.js';
+import { haversine, routePassesNearPoint } from '#shared/utils/geo.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
+import { generateDetourWaypoints } from '#shared/utils/detour.js';
+import { logger } from '#shared/utils/logger.js';
 
 const CACHE_TTL_CLEAR_MS    = 60 * 60 * 1000;
 const CACHE_TTL_INCIDENT_MS = 10 * 60 * 1000;
@@ -71,6 +73,52 @@ const _formatRouteResponse = (data, fromCache = false) => ({
   impact: data.impact,
 });
 
+const _findDetourRoute = async (from, to, checkpointsToAvoid) => {
+  if (!checkpointsToAvoid.length) return null;
+
+  const candidates = [];
+
+  for (const cp of checkpointsToAvoid) {
+    const offsets = [8, 12];
+
+    for (const offset of offsets) {
+      const waypoints = generateDetourWaypoints(from, to, cp, offset);
+
+      for (const waypoint of waypoints) {
+        console.log(`testing waypoint with offset ${offset}km:`, waypoint);
+
+        try {
+          const result = await getOsrmRouteViaWaypoint(from, waypoint, to);
+
+          console.log('route via waypoint succeed');
+
+          const isClean = !checkpointsToAvoid.some((avoidedCp) =>
+            routePassesNearPoint(
+              result.geometry,
+              Number(avoidedCp.latitude),
+              Number(avoidedCp.longitude),
+              1.5
+            )
+          );
+
+          if (isClean) {
+            logger.debug('clean route found');
+            candidates.push(result);
+          } else {
+            console.log('route still passes checkpoint');
+          }
+        } catch (err) {
+          console.log('waypoint failed:', waypoint, err.message);
+          continue;
+        }
+      }
+    }
+  }
+
+  if (!candidates.length) return null;
+
+  return candidates.sort((a, b) => a.durationMinutes - b.durationMinutes)[0];
+};
 export class RoutesService {
 
   constructor(routesRepository) {
@@ -115,26 +163,32 @@ export class RoutesService {
       this.routesRepository.findActiveIncidents(),
     ]);
 
-    const checkpointsOnRoute = allCheckpoints.filter((cp) => {
+    let distanceKm, durationMinutes, geometry, isFallback;
+    isFallback = false;
+    let avoidanceWarning = null;
+    let selectedGeometry=null;
+
+
+    /*const checkpointsOnRoute = allCheckpoints.filter((cp) => {
       const distFromRoute = Math.min(
         distanceBetween(from.lat, from.lng, Number(cp.latitude), Number(cp.longitude)),
         distanceBetween(to.lat,   to.lng,   Number(cp.latitude), Number(cp.longitude))
       );
       return distFromRoute <= 15;
-    });
+    });*/
 
-    const incidentsOnRoute = allIncidents.filter((inc) => {
+    
+    /*const incidentsOnRoute = allIncidents.filter((inc) => {
       const distFromRoute = Math.min(
         distanceBetween(from.lat, from.lng, Number(inc.locationLat), Number(inc.locationLng)),
         distanceBetween(to.lat,   to.lng,   Number(inc.locationLat), Number(inc.locationLng))
       );
       return distFromRoute <= 20;
-    });
+    });*/
 
-    let distanceKm, durationMinutes, geometry, isFallback;
-    isFallback = false;
+   
 
-    try {
+    /*try {
       const osrm      = await getOsrmRoute(from, to);
       distanceKm      = osrm.distanceKm;
       durationMinutes = osrm.durationMinutes;
@@ -162,7 +216,224 @@ export class RoutesService {
         isFallback:     true,
         errorMessage:   'OSRM unavailable — using Haversine fallback',
       });
+    }*/
+///////////////////////////////////////////////////////////////////////////////////////////////////
+  /*try {
+    const osrm = await getOsrmRoutes(from, to);
+    console.log('ORSM route count:',osrm.routes.length);//
+    
+    const checkpointsToAvoid = allCheckpoints.filter((cp) =>
+    avoid_checkpoints.includes(cp.id)
+  );*/
+
+  /*const validRoutes = osrm.routes.filter((route) => {
+    const passesAvoidedCheckpoint = checkpointsToAvoid.some((cp) =>
+      routePassesNearPoint(
+        route.geometry,
+        Number(cp.latitude),
+        Number(cp.longitude),
+        1.5
+      )
+    );
+
+
+    return !passesAvoidedCheckpoint;
+  });*////////////////////////// هاد الكود رح أرجعه --بس مؤقتا بدي اعدله عشان الطباعة
+
+ /*
+  const validRoutes = osrm.routes.filter((route, index) => {/////////////////
+  const matchedCheckpoints = checkpointsToAvoid.filter((cp) =>
+    routePassesNearPoint(
+      route.geometry,
+      Number(cp.latitude),
+      Number(cp.longitude),
+      1.5
+    )
+  );
+
+  console.log(
+    `Route ${index + 1}: distance=${route.distanceKm} km, duration=${route.durationMinutes} min`
+  );
+
+  if (matchedCheckpoints.length > 0) {
+    console.log(
+      `Route ${index + 1} passes avoided checkpoints:`,
+      matchedCheckpoints.map((cp) => `${cp.id} - ${cp.name}`)
+    );
+  } else {
+    console.log(`Route ${index + 1} avoids all selected checkpoints`);
+  }
+
+  return matchedCheckpoints.length === 0;
+});/////////////////////
+
+  if (avoid_checkpoints?.length > 0 && osrm.routes.length === 1) {//
+    avoidanceWarning = 'OSRM did not return alternative routes for the selected path';
+    }else if (avoid_checkpoints?.length > 0 && osrm.routes.length > 1 && validRoutes.length === 0) {
+    avoidanceWarning = 'No alternative route found that fully avoids selected checkpoints';}//
+
+  const selectedRoute =
+    validRoutes.length > 0
+      ? validRoutes.sort((a, b) => a.durationMinutes - b.durationMinutes)[0]
+      : osrm.routes[0];
+
+  
+  distanceKm = selectedRoute.distanceKm;
+  durationMinutes = selectedRoute.durationMinutes;
+  geometry = selectedRoute.geometry;
+  selectedGeometry=selectedRoute.geometry;//
+  console.log('Selected route geometry points count:', selectedGeometry?.coordinates?.length);//
+
+  await this.routesRepository.logApiCall({
+    service: API_SERVICES.OSRM,
+    endpoint: `/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}`,
+    statusCode: 200,
+    responseTimeMs: osrm.responseTimeMs,
+    isFallback: false,
+  });
+
+} catch {
+  distanceKm = haversine(from, to);
+  durationMinutes = parseFloat(((distanceKm / AVERAGE_SPEED_KMH) * 60).toFixed(2));
+  geometry = null;
+  isFallback = true;
+  selectedGeometry=null;//
+
+  await this.routesRepository.logApiCall({
+    service: API_SERVICES.OSRM,
+    endpoint: `/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}`,
+    statusCode: null,
+    responseTimeMs: null,
+    isFallback: true,
+    errorMessage: 'OSRM unavailable — using Haversine fallback',
+  });
+}*/
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+try {
+  const osrm = await getOsrmRoutes(from, to);
+  console.log('OSRM route count:', osrm.routes.length);
+
+  const checkpointsToAvoid = allCheckpoints.filter((cp) =>
+    avoid_checkpoints.includes(cp.id)
+  );
+
+  const validRoutes = osrm.routes.filter((route, index) => {
+    const matchedCheckpoints = checkpointsToAvoid.filter((cp) =>
+      routePassesNearPoint(
+        route.geometry,
+        Number(cp.latitude),
+        Number(cp.longitude),
+        1.5
+      )
+    );
+
+    console.log(
+      `Route ${index + 1}: distance=${route.distanceKm} km, duration=${route.durationMinutes} min`
+    );
+
+    if (matchedCheckpoints.length > 0) {
+      console.log(
+        `Route ${index + 1} passes avoided checkpoints:`,
+        matchedCheckpoints.map((cp) => `${cp.id} - ${cp.name}`)
+      );
+    } else {
+      console.log(`Route ${index + 1} avoids all selected checkpoints`);
     }
+
+    return matchedCheckpoints.length === 0;
+  });
+
+  let selectedRoute =
+    validRoutes.length > 0
+      ? validRoutes.sort((a, b) => a.durationMinutes - b.durationMinutes)[0]
+      : null;
+
+  // Plan B
+  if (!selectedRoute && checkpointsToAvoid.length > 0) {
+    console.log('trying palne B (detour)...');
+    const detourRoute = await _findDetourRoute(from, to, checkpointsToAvoid);
+
+    if (detourRoute) {
+      selectedRoute = detourRoute;
+      avoidanceWarning = 'Using detour route to avoid selected checkpoint';
+    }
+  }
+
+  // fallback
+  if (!selectedRoute) {
+    selectedRoute = osrm.routes[0];
+
+    if (avoid_checkpoints?.length > 0) {
+      if (osrm.routes.length === 1) {
+        avoidanceWarning = 'OSRM did not return alternative routes, and no detour route was found';
+      } else {
+        avoidanceWarning = 'No alternative or detour route found that fully avoids selected checkpoints';
+      }
+    }
+  }
+
+  distanceKm = selectedRoute.distanceKm;
+  durationMinutes = selectedRoute.durationMinutes;
+  geometry = selectedRoute.geometry;
+  selectedGeometry = selectedRoute.geometry;
+
+  console.log('Selected route geometry points count:', selectedGeometry?.coordinates?.length);
+
+  await this.routesRepository.logApiCall({
+    service: API_SERVICES.OSRM,
+    endpoint: `/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}`,
+    statusCode: 200,
+    responseTimeMs: osrm.responseTimeMs,
+    isFallback: false,
+  });
+
+} catch(err) {
+  console.log('ERROR inside ORSM try block:',err.message);
+  distanceKm = haversine(from, to);
+  durationMinutes = parseFloat(((distanceKm / AVERAGE_SPEED_KMH) * 60).toFixed(2));
+  geometry = null;
+  isFallback = true;
+  selectedGeometry = null;
+
+  await this.routesRepository.logApiCall({
+    service: API_SERVICES.OSRM,
+    endpoint: `/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}`,
+    statusCode: null,
+    responseTimeMs: null,
+    isFallback: true,
+    errorMessage: 'OSRM unavailable — using Haversine fallback',
+  });
+}
+    const checkpointsOnRoute = allCheckpoints.filter((cp) => {
+    if (!selectedGeometry) return false;
+
+   const passes= routePassesNearPoint(
+    selectedGeometry,
+    Number(cp.latitude),
+    Number(cp.longitude),
+    1.5
+   );
+
+   if (passes) {//
+    console.log('Checkpoint ON ROUTE:', cp.id, cp.name);
+  }///
+
+  return passes;
+   });
+
+    const incidentsOnRoute = allIncidents.filter((inc) => {
+   if (!selectedGeometry) return false;
+
+   return routePassesNearPoint(
+    selectedGeometry,
+    Number(inc.locationLat),
+    Number(inc.locationLng),
+    2
+   );
+   });
+
 
     let weather = null;
     const midpoint = {
@@ -195,6 +466,8 @@ export class RoutesService {
     let totalDelayMinutes = 0;
     const factors         = [];
     const warnings        = [];
+
+    if (avoidanceWarning) warnings.push(avoidanceWarning);
 
     /*for (const cp of checkpointsOnRoute) {
       const isAvoided = avoid_checkpoints.includes(cp.id);
