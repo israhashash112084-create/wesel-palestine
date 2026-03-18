@@ -28,3 +28,29 @@ export const haversine = (from, to) => {
  */
 export const distanceBetween = (lat1, lng1, lat2, lng2) =>
   haversine({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
+
+
+// ─── Route Geometry Helpers ──────────────────────────────
+
+export const routePassesNearPoint = (
+  geometry,
+  pointLat,
+  pointLng,
+  thresholdKm = 1.5
+) => {
+  if (!geometry || geometry.type !== 'LineString' || !geometry.coordinates?.length) {
+    return false;
+  }
+
+  for (const coord of geometry.coordinates) {
+    const [lng, lat] = coord;
+
+    const distance = distanceBetween(lat, lng, pointLat, pointLng);
+
+    if (distance <= thresholdKm) {
+      return true;
+    }
+  }
+
+  return false;
+};
