@@ -9,6 +9,7 @@ import {
   updateIncidentBodySchema,
   incidentIdParamSchema,
   listIncidentsSchema,
+  incidentHistoryQuerySchema,
 } from './incidents.validator.js';
 
 const router = Router();
@@ -64,6 +65,15 @@ router.get(
   authorize('moderator', 'admin'),
   validateRequest(incidentIdParamSchema, 'params'),
   incidentsController.getIncidentReports
+);
+
+router.get(
+  '/:id/history',
+  authenticate,
+  authorize('moderator', 'admin'),
+  validateRequest(incidentIdParamSchema, 'params'),
+  validateRequest(incidentHistoryQuerySchema, 'query'),
+  incidentsController.getIncidentHistory
 );
 
 export default router;

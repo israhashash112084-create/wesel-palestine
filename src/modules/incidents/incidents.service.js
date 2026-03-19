@@ -1,6 +1,6 @@
 import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
-import { INCIDENT_STATUSES } from '#shared/constants/enums.js';
+import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
 
 export class IncidentsService {
   constructor(incidentsRepository) {
@@ -110,15 +110,13 @@ export class IncidentsService {
   }
 
   async createVerifiedIncident(userInfo, body) {
-    // TODO: Implement a more robust duplicate detection mechanism that considers both location and time proximity, as well as incident type and severity.
-
-    const verifiedAt = new Date();
+    const moderatedAt = new Date();
 
     return this.repo.create(
       this._buildIncidentCreatePayload(userInfo, body, {
-        status: INCIDENT_STATUSES.VERIFIED, // Automatically mark as verified when created by a moderator/admin
-        verifiedAt,
-        verifiedBy: userInfo.id,
+        status: INCIDENT_STATUSES.VERIFIED,
+        moderatedAt,
+        moderatedBy: userInfo.id,
       })
     );
   }
@@ -131,43 +129,6 @@ export class IncidentsService {
         status: INCIDENT_STATUSES.PENDING,
       })
     );
-  }
-
-  async verifyIncident(id, userInfo, notes = 'Verified incident') {
-    const existingIncident = await this.repo.findById(id);
-    if (!existingIncident) {
-      throw new NotFoundError('Incident not found');
-    }
-
-    if (existingIncident.status === INCIDENT_STATUSES.CLOSED) {
-      throw new BadRequestError('Closed incidents cannot be verified');
-    }
-
-    if (existingIncident.status === INCIDENT_STATUSES.VERIFIED) {
-      throw new BadRequestError('Incident is already verified');
-    }
-
-    const verifiedAt = new Date();
-
-    return this.repo.updateWithStatusHistory(id, {
-      status: INCIDENT_STATUSES.VERIFIED,
-      verifiedAt,
-      verifiedBy: userInfo.id,
-      trafficStatus: existingIncident.trafficStatus,
-      oldStatus: existingIncident.trafficStatus,
-      changedBy: userInfo.id,
-      notes,
-      oldValues: {
-        status: existingIncident.status,
-        verifiedAt: existingIncident.verifiedAt ?? null,
-        verifiedBy: existingIncident.verifiedBy ?? null,
-      },
-      newValues: {
-        status: INCIDENT_STATUSES.VERIFIED,
-        verifiedAt,
-        verifiedBy: userInfo.id,
-      },
-    });
   }
 
   async updateIncident(id, body, userInfo) {
@@ -211,7 +172,7 @@ export class IncidentsService {
 
     const updatedIncident = await this.repo.updateWithStatusHistory(id, {
       status: INCIDENT_STATUSES.CLOSED,
-      trafficStatus: INCIDENT_STATUSES.CLOSED,
+      trafficStatus: TRAFFIC_STATUSES.CLOSED,
       resolvedAt: new Date(),
       oldStatus: existingIncident.trafficStatus,
       changedBy: userInfo.id,
@@ -237,5 +198,68 @@ export class IncidentsService {
         reportedBy: 'user1',
       },
     ];
+  }
+  async verifyIncident(id, userInfo, notes = 'Verified incident') {
+    return this._moderateIncident(id, INCIDENT_STATUSES.VERIFIED, userInfo, notes);
+  }
+
+  async rejectIncident(id, userInfo, notes = 'Reject incident') {
+    return this._moderateIncident(id, INCIDENT_STATUSES.REJECTED, userInfo, notes);
+  }
+
+  async _moderateIncident(id, newStatus, userInfo, notes) {
+    const existingIncident = await this.repo.findById(id);
+    if (!existingIncident) throw new NotFoundError('Incident not found');
+
+    if (existingIncident.status === INCIDENT_STATUSES.CLOSED)
+      throw new BadRequestError('Closed incidents cannot be modified');
+
+    if (existingIncident.status === newStatus)
+      throw new BadRequestError(`Incident is already ${newStatus}`);
+
+    const now = new Date();
+
+    return this.repo.updateWithStatusHistory(id, {
+      status: newStatus,
+      moderatedAt: now,
+      moderatedBy: userInfo.id,
+      trafficStatus: existingIncident.trafficStatus,
+      oldStatus: existingIncident.trafficStatus,
+      changedBy: userInfo.id,
+      notes,
+      oldValues: {
+        status: existingIncident.status,
+        moderatedAt: existingIncident.moderatedAt ?? null,
+        moderatedBy: existingIncident.moderatedBy ?? null,
+      },
+      newValues: {
+        status: newStatus,
+        moderatedAt: now,
+        moderatedBy: userInfo.id,
+      },
+    });
+  }
+
+  async getIncidentHistory(incidentId, filters) {
+    const incident = await this.repo.findById(incidentId);
+    if (!incident) {
+      throw new NotFoundError('Incident not found');
+    }
+
+    const { page, limit, sortBy, sortOrder } = filters;
+    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+
+    const { history, total } = await this.repo.findStatusHistory(incidentId, {
+      skip,
+      take,
+      sortBy,
+      sortOrder,
+    });
+
+    return {
+      incidentId: Number(incidentId),
+      history,
+      pagination: buildPaginationMeta(total),
+    };
   }
 }
