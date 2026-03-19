@@ -259,14 +259,6 @@ export class ReportsRepository {
     });
   }
 
-  filterByDistance(row, radiusMeters) {
-    if (!row || Number(row.distance_meters) > radiusMeters) {
-      return null;
-    }
-
-    return row;
-  }
-
   _findNearest(rows, lat, lng, radiusKm) {
     if (!rows || rows.length === 0) return null;
 
