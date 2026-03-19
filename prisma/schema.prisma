@@ -84,29 +84,29 @@ model RefreshToken {
 }
 
 model Report {
-  id              Int              @id @default(autoincrement())
-  userId          String?          @map("user_id") @db.Uuid
-  incidentId      Int?             @map("incident_id")
-  locationLat     Decimal          @map("location_lat") @db.Decimal(10, 8)
-  locationLng     Decimal          @map("location_lng") @db.Decimal(11, 8)
-  area            String?          @db.VarChar(255)
+  id              Int          @id @default(autoincrement())
+  userId          String?      @map("user_id") @db.Uuid
+  incidentId      Int?         @map("incident_id")
+  locationLat     Decimal      @map("location_lat") @db.Decimal(10, 8)
+  locationLng     Decimal      @map("location_lng") @db.Decimal(11, 8)
+  area            String?      @db.VarChar(255)
   type            IncidentType
   severity        IncidentSeverity @default(low)
-  description     String           @db.Text
-  confidenceScore Int              @default(0) @map("confidence_score")
-  status          ReportStatus     @default(pending)
-  moderatedBy     String?          @map("moderated_by") @db.Uuid
-  moderatedAt     DateTime?        @map("moderated_at") @db.Timestamptz(6)
-  rejectReason    String?          @map("reject_reason") @db.Text
-  duplicateOf     Int?             @map("duplicate_of")
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  description     String       @db.Text
+  confidenceScore Int          @default(0) @map("confidence_score")
+  status          ReportStatus @default(pending)
+  moderatedBy     String?      @map("moderated_by") @db.Uuid
+  moderatedAt     DateTime?    @map("moderated_at") @db.Timestamptz(6)
+  rejectReason    String?      @map("reject_reason") @db.Text
+  duplicateOf     Int?         @map("duplicate_of")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6) 
 
   original   Report?  @relation("ReportDuplicates", fields: [duplicateOf], references: [id], onDelete: SetNull)
   duplicates Report[] @relation("ReportDuplicates")
 
-  user     User?      @relation("UserReports", fields: [userId], references: [id], onDelete: SetNull)
-  incident Incidents? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  user      User? @relation("UserReports", fields: [userId], references: [id], onDelete: SetNull)
+  incident  Incidents? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
 
   votes     ReportVote[]
   auditLogs ModerationAuditLog[]
@@ -118,6 +118,7 @@ model Report {
   @@index([duplicateOf], map: "idx_reports_duplicate_of")
   @@index([locationLat, locationLng], map: "idx_reports_location")
   @@index([createdAt], map: "idx_reports_created_at")
+
   @@map("reports")
 }
 
@@ -166,6 +167,7 @@ model Incidents {
   @@index([reportedBy], map: "idx_incidents_reported_by")
   @@index([moderatedBy], map: "idx_incidents_verified_by")
   @@index([createdAt(sort: Desc)], map: "idx_incidents_created_at")
+
   @@map("incidents")
 }
 
