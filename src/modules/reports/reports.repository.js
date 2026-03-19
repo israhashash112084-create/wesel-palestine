@@ -50,55 +50,13 @@ export class ReportsRepository {
         locationLng: data.locationLng,
         area: data.area ?? null,
         type: data.type,
+        severity: data.severity,
         description: data.description,
         duplicateOf: data.duplicateOf ?? null,
         incidentId: data.incidentId ?? null,
       },
       select: this._reportSelect(),
     });
-  }
-
-  async findNearestMatchingReport({
-    selectClause,
-    whereClause,
-    params,
-    latParamIndex,
-    lngParamIndex,
-    radiusMeters,
-  }) {
-    const result = await query(
-      `
-      SELECT ${selectClause},
-        (
-          6371000 * acos(
-            LEAST(1.0,
-              cos(radians($${latParamIndex})) * cos(radians(location_lat))
-              * cos(radians(location_lng) - radians($${lngParamIndex}))
-              + sin(radians($${latParamIndex})) * sin(radians(location_lat))
-            )
-          )
-        ) AS distance_meters
-      FROM reports
-      WHERE ${whereClause}
-      ORDER BY distance_meters ASC
-      LIMIT 1
-      `,
-      params
-    );
-
-    return this.filterByDistance(result.rows[0], radiusMeters);
-  }
-
-  filterByDistance(row, radiusMeters) {
-    if (!row || Number(row.distance_meters) > radiusMeters) {
-      return null;
-    }
-
-    return row;
-  }
-
-  msToSeconds(ms) {
-    return ms / 1000;
   }
 
   async findById(id) {
