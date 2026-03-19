@@ -6,7 +6,7 @@ export class IncidentsRepository {
       id: true,
       checkpointId: true,
       reportedBy: true,
-      verifiedBy: true,
+      moderatedBy: true,
       locationLat: true,
       locationLng: true,
       area: true,
@@ -15,7 +15,7 @@ export class IncidentsRepository {
       severity: true,
       description: true,
       trafficStatus: true,
-      verifiedAt: true,
+      moderatedAt: true,
       resolvedAt: true,
       createdAt: true,
       updatedAt: true,
@@ -33,7 +33,7 @@ export class IncidentsRepository {
           lastName: true,
         },
       },
-      verifier: {
+      moderator: {
         select: {
           id: true,
           firstName: true,
@@ -54,9 +54,19 @@ export class IncidentsRepository {
   async create(data) {
     const incident = await prisma.incidents.create({
       data: {
-        checkpointId: data.checkpointId,
-        reportedBy: data.reportedBy,
-        verifiedBy: data.verifiedBy,
+        ...(data.checkpointId && {
+          checkpoint: {
+            connect: { id: data.checkpointId },
+          },
+        }),
+        reporter: {
+          connect: { id: data.reportedBy },
+        },
+        ...(data.moderatedBy && {
+          moderator: {
+            connect: { id: data.moderatedBy },
+          },
+        }),
         locationLat: data.locationLat,
         locationLng: data.locationLng,
         area: data.area,
@@ -65,7 +75,7 @@ export class IncidentsRepository {
         description: data.description,
         trafficStatus: data.trafficStatus,
         status: data.status,
-        verifiedAt: data.verifiedAt,
+        moderatedAt: data.moderatedAt,
       },
       select: this._baseSelect(),
     });
@@ -152,8 +162,14 @@ export class IncidentsRepository {
           severity: data.severity,
           description: data.description,
           status: data.status,
-          verifiedBy: data.verifiedBy,
-          verifiedAt: data.verifiedAt,
+
+          ...(data.moderatedBy && {
+            moderator: {
+              connect: { id: data.moderatedBy },
+            },
+          }),
+
+          moderatedAt: data.moderatedAt ?? null,
           trafficStatus: data.trafficStatus,
           locationLat: data.locationLat,
           locationLng: data.locationLng,
@@ -177,7 +193,6 @@ export class IncidentsRepository {
 
       return incident;
     });
-
     return this._normalizeRecord(updatedIncident);
   }
 
