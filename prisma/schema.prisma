@@ -31,15 +31,15 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  checkpoints Checkpoints[]
+  checkpoint Checkpoint[]
   refreshTokens RefreshToken[]
   statusHistory IncidentStatusHistory[]
 
   reports             Report[]             @relation("UserReports")
   reportVotes         ReportVote[]         @relation("UserVotes")
   moderationAuditLogs ModerationAuditLog[] @relation("ModerationAuditModerator")
-  reportedIncidents   Incidents[]          @relation("IncidentReporter")
-  moderadedIncidents   Incidents[]          @relation("IncidentModerad")
+  reportedIncidents   Incident[]          @relation("IncidentReporter")
+  moderatedIncidents   Incident[]          @relation("IncidentModerated")
 }
 
 enum Role {
@@ -48,24 +48,26 @@ enum Role {
   admin
 }
 
-model Checkpoints {
+model Checkpoint {
   @@map("checkpoints")
-  id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(100)
-  areaName   String?    @db.VarChar(100) @map("area_name")
-  description String?  @db.Text
-  latitude    Decimal    @db.Decimal(10, 6)
-  longitude   Decimal    @db.Decimal(10, 6)
-  status     TrafficStatus @default(open)
-  createdBy   String?   @db.Uuid @map("created_by")
-  user       User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  incidents Incidents[]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+    
+  id          Int           @id @default(autoincrement())
+  name        String        @db.VarChar(100)
+  areaName    String?       @map("area_name") @db.VarChar(100)
+  description String?       @db.Text
+  latitude    Decimal       @db.Decimal(10, 6)
+  longitude   Decimal       @db.Decimal(10, 6)
+  status      TrafficStatus @default(open)
+  createdBy   String?       @map("created_by") @db.Uuid
+  user        User?         @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  incidents   Incident[]
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 }
 
 model RefreshToken {
   @@map("refresh_tokens")
+  
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId     String   @db.Uuid @map("user_id")
   tokenHash  String   @db.VarChar(255) @map("token_hash")
@@ -82,6 +84,8 @@ model RefreshToken {
 }
 
 model Report {
+  @@map("reports")
+
   id              Int          @id @default(autoincrement())
   userId          String?      @map("user_id") @db.Uuid
   incidentId      Int?         @map("incident_id")
@@ -91,7 +95,7 @@ model Report {
   type            IncidentType
   severity        IncidentSeverity @default(low)
   description     String       @db.Text
-  confidenceScore Int          @default(0) @map("confidence_score")
+  confidenceScore Float          @default(0) @map("confidence_score")
   status          ReportStatus @default(pending)
   moderatedBy     String?      @map("moderated_by") @db.Uuid
   moderatedAt     DateTime?    @map("moderated_at") @db.Timestamptz(6)
@@ -104,7 +108,7 @@ model Report {
   duplicates Report[] @relation("ReportDuplicates")
 
   user      User? @relation("UserReports", fields: [userId], references: [id], onDelete: SetNull)
-  incident  Incidents? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  incident  Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
 
   votes     ReportVote[]
   auditLogs ModerationAuditLog[]
@@ -116,8 +120,6 @@ model Report {
   @@index([duplicateOf], map: "idx_reports_duplicate_of")
   @@index([locationLat, locationLng], map: "idx_reports_location")
   @@index([createdAt], map: "idx_reports_created_at")
-
-  @@map("reports")
 }
 
 enum ReportStatus {
@@ -126,12 +128,14 @@ enum ReportStatus {
   rejected
 }
 
-model Incidents {
+model Incident {
+  @@map("incidents")
+
   id           Int             @id @default(autoincrement())
   checkpointId Int?            @map("checkpoint_id")
 
   reportedBy   String          @map("reported_by") @db.Uuid
-  moderadedBy   String?         @map("moderade_by") @db.Uuid
+  moderatedBy   String?         @map("moderated_by") @db.Uuid
 
   locationLat Decimal          @map("location_lat") @db.Decimal(10, 8)
   locationLng Decimal          @map("location_lng") @db.Decimal(11, 8)
@@ -145,15 +149,15 @@ model Incidents {
   trafficStatus TrafficStatus  @default(unknown) @map("traffic_status")
   status      IncidentStatus   @default(pending)
 
-  moderadeddAt DateTime?         @map("moderaded_at")
+  moderatedAt DateTime?         @map("moderated_at")
   resolvedAt DateTime?         @map("resolved_at")
 
   createdAt DateTime           @default(now()) @map("created_at")
   updatedAt DateTime           @updatedAt @map("updated_at")
 
-  checkpoint Checkpoints?      @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
+  checkpoint Checkpoint?      @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
   reporter   User              @relation("IncidentReporter", fields: [reportedBy], references: [id], onDelete: Cascade)
-  moderad   User?             @relation("IncidentModerad", fields: [moderadedBy], references: [id], onDelete: SetNull)
+  moderator   User?             @relation("IncidentModerated", fields: [moderatedBy], references: [id], onDelete: SetNull)
 
   reports Report[] 
 
@@ -163,10 +167,8 @@ model Incidents {
   @@index([type], map: "idx_incidents_type")
   @@index([severity], map: "idx_incidents_severity")
   @@index([reportedBy], map: "idx_incidents_reported_by")
-  @@index([moderadedBy], map: "idx_incidents_verified_by")
+  @@index([moderatedBy], map: "idx_incidents_moderated_by")
   @@index([createdAt(sort: Desc)], map: "idx_incidents_created_at")
-
-  @@map("incidents")
 }
 
 model IncidentStatusHistory {
@@ -176,15 +178,15 @@ model IncidentStatusHistory {
   incidentId Int              @map("incident_id")
   changedBy  String           @db.Uuid @map("changed_by")
 
-  oldStatus  TrafficStatus    @map("old_status")
-  newStatus  TrafficStatus    @map("new_status")
+  oldStatus  IncidentStatus    @map("old_status")
+  newStatus  IncidentStatus    @map("new_status")
 
   changedAt  DateTime         @default(now()) @db.Timestamptz(6)
   notes      String?
   oldValues  Json?            @map("old_values")
   newValues  Json?            @map("new_values")
 
-  incident   Incidents        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  incident   Incident        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   user       User             @relation(fields: [changedBy], references: [id], onDelete: Cascade)
 }
 
@@ -211,6 +213,7 @@ enum IncidentSeverity {
 enum IncidentStatus {
   pending
   verified
+  rejected
   closed
 }
 
@@ -221,8 +224,9 @@ enum TrafficStatus {
   unknown
 }
 
-
 model ReportVote {
+  @@map("report_votes")
+
   id        Int       @id @default(autoincrement())
   reportId  Int       @map("report_id")
   userId    String    @map("user_id") @db.Uuid
@@ -235,7 +239,6 @@ model ReportVote {
   @@unique([reportId, userId], map: "unique_user_vote")
   @@index([reportId], map: "idx_report_votes_report_id")
   @@index([userId], map: "idx_report_votes_user_id")
-  @@map("report_votes")
 } 
 
 enum VoteValue {
@@ -244,6 +247,8 @@ enum VoteValue {
 }
 
 model ModerationAuditLog {
+  @@map("moderation_audit_log")
+
   id          Int              @id @default(autoincrement())
   reportId    Int              @map("report_id")
   moderatorId String?          @map("moderator_id") @db.Uuid
@@ -257,10 +262,7 @@ model ModerationAuditLog {
   @@index([reportId], map: "idx_mod_audit_report_id")
   @@index([moderatorId], map: "idx_mod_audit_moderator_id")
   @@index([createdAt(sort: Desc)], map: "idx_mod_audit_created_at")
-  @@map("moderation_audit_log")
 }
-
-
 
 enum ModerationAction {
   approved

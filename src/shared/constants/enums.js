@@ -20,6 +20,7 @@ export const INCIDENT_TYPES = {
 export const INCIDENT_STATUSES = {
   PENDING: 'pending',
   VERIFIED: 'verified',
+  REJECTED: 'rejected',
   CLOSED: 'closed',
 };
 
