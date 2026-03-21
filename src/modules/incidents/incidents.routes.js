@@ -4,6 +4,8 @@ import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import { IncidentsRepository } from './incidents.repository.js';
 import { IncidentsService } from './incidents.service.js';
 import { IncidentsController } from './incidents.controller.js';
+import { AlertsRepository } from '#modules/alerts/alerts.repository.js';
+import { AlertsService } from '#modules/alerts/alerts.service.js';
 import {
   createIncidentSchema,
   updateIncidentBodySchema,
@@ -14,7 +16,9 @@ import {
 const router = Router();
 
 const incidentsRepository = new IncidentsRepository();
-const incidentsService = new IncidentsService(incidentsRepository);
+const alertsRepository = new AlertsRepository();
+const alertsService = new AlertsService(alertsRepository);
+const incidentsService = new IncidentsService(incidentsRepository, alertsService);
 const incidentsController = new IncidentsController(incidentsService);
 
 router.get(

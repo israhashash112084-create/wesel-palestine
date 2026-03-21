@@ -1,14 +1,14 @@
 import { prisma } from '#database/db.js';
 
 export class AlertsRepository {
-  async createSubscription({ userId, areaLat, areaLng, radiusKm, incidentCategory }) {
+  async createSubscription({ userId, areaLat, areaLng, radiusKm, category }) {
     return await prisma.alertSubscription.create({
       data: {
         userId,
         areaLat,
         areaLng,
         radiusKm,
-        incidentCategory,
+        category,
       },
     });
   }
@@ -46,17 +46,48 @@ export class AlertsRepository {
 
   async findAlertsByUserId(userId) {
     return await prisma.alert.findMany({
-      where: { userId },
+      where: {
+        subscription: {
+          userId,
+        },
+      },
       orderBy: { createdAt: 'desc' },
+      include: {
+        subscription: true,
+        incident: true,
+      },
     });
   }
 
   async markAlertAsRead(id, userId) {
     return await prisma.alert.updateMany({
-      where: { id, userId },
+      where: {
+        id,
+        subscription: {
+          userId,
+        },
+      },
       data: {
         status: 'read',
-        readAt: new Date(),
+      },
+    });
+  }
+
+  async findMatchingSubscriptionsForIncident({ category }) {
+    return await prisma.alertSubscription.findMany({
+      where: {
+        isActive: true,
+        OR: [{ category }, { category: 'all' }],
+      },
+    });
+  }
+
+  async createAlert({ incidentId, subscriptionId, status = 'pending' }) {
+    return await prisma.alert.create({
+      data: {
+        incidentId,
+        subscriptionId,
+        status,
       },
     });
   }

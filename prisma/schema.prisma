@@ -9,53 +9,45 @@ datasource db {
 }
 
 model User {
-
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email           String   @unique
-  passwordHash    String   @map("password_hash") @db.VarChar(255)
-  firstName       String   @map("first_name") @db.VarChar(50)
-  lastName        String   @map("last_name") @db.VarChar(50)
-  role            Role     @default(user)
-  confidenceScore Float    @default(0.0) @map("confidence_score")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
+  id                  String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email               String                  @unique
+  firstName           String                  @map("first_name") @db.VarChar(50)
+  lastName            String                  @map("last_name") @db.VarChar(50)
+  role                Role                    @default(user)
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  confidenceScore     Float                   @default(0.0) @map("confidence_score")
+  passwordHash        String                  @map("password_hash") @db.VarChar(255)
   checkpoints         Checkpoints[]
-  refreshTokens       RefreshToken[]
   statusHistory       IncidentStatusHistory[]
-  reports             Report[]                @relation("UserReports")
-  reportVotes         ReportVote[]            @relation("UserVotes")
-  moderationAuditLogs ModerationAuditLog[]    @relation("ModerationAuditModerator")
-  reportedIncidents   Incidents[]             @relation("IncidentReporter")
   moderadedIncidents  Incidents[]             @relation("IncidentModerad")
-
-  alertSubscriptions AlertSubscription[]
-  alerts             Alert[]
-
+  reportedIncidents   Incidents[]             @relation("IncidentReporter")
+  moderationAuditLogs ModerationAuditLog[]    @relation("ModerationAuditModerator")
+  refreshTokens       RefreshToken[]
+  reportVotes         ReportVote[]            @relation("UserVotes")
+  reports             Report[]                @relation("UserReports")
+  alertSubscriptions  AlertSubscription[]
   @@map("users")
 }
 
 model Checkpoints {
-
   id          Int           @id @default(autoincrement())
   name        String        @db.VarChar(100)
   areaName    String?       @map("area_name") @db.VarChar(100)
-  description String?       @db.Text
+  description String?
   latitude    Decimal       @db.Decimal(10, 6)
   longitude   Decimal       @db.Decimal(10, 6)
   status      TrafficStatus @default(open)
   createdBy   String?       @map("created_by") @db.Uuid
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
-
-  user      User?       @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  incidents Incidents[]
+  user        User?         @relation(fields: [createdBy], references: [id])
+  incidents   Incidents[]
 
   @@map("checkpoints")
 }
 
 model RefreshToken {
-
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId     String   @map("user_id") @db.Uuid
   tokenHash  String   @map("token_hash") @db.VarChar(255)
@@ -64,8 +56,7 @@ model RefreshToken {
   deviceName String   @default("Unknown Device") @map("device_name") @db.VarChar(255)
   createdAt  DateTime @default(now()) @map("created_at")
   lastUsedAt DateTime @default(now()) @map("last_used_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, deviceId])
   @@index([tokenHash])
@@ -73,31 +64,29 @@ model RefreshToken {
 }
 
 model Report {
-
-  id              Int              @id @default(autoincrement())
-  userId          String?          @map("user_id") @db.Uuid
-  incidentId      Int?             @map("incident_id")
-  locationLat     Decimal          @map("location_lat") @db.Decimal(10, 8)
-  locationLng     Decimal          @map("location_lng") @db.Decimal(11, 8)
-  area            String?          @db.VarChar(255)
+  id              Int                  @id @default(autoincrement())
+  userId          String?              @map("user_id") @db.Uuid
+  locationLat     Decimal              @map("location_lat") @db.Decimal(10, 8)
+  locationLng     Decimal              @map("location_lng") @db.Decimal(11, 8)
+  area            String?              @db.VarChar(255)
   type            IncidentType
-  severity        IncidentSeverity @default(low)
-  description     String           @db.Text
-  confidenceScore Int              @default(0) @map("confidence_score")
-  status          ReportStatus     @default(pending)
-  moderatedBy     String?          @map("moderated_by") @db.Uuid
-  moderatedAt     DateTime?        @map("moderated_at") @db.Timestamptz(6)
-  rejectReason    String?          @map("reject_reason") @db.Text
-  duplicateOf     Int?             @map("duplicate_of")
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  original   Report?              @relation("ReportDuplicates", fields: [duplicateOf], references: [id], onDelete: SetNull)
-  duplicates Report[]             @relation("ReportDuplicates")
-  user       User?                @relation("UserReports", fields: [userId], references: [id], onDelete: SetNull)
-  incident   Incidents?           @relation(fields: [incidentId], references: [id], onDelete: SetNull)
-  votes      ReportVote[]
-  auditLogs  ModerationAuditLog[]
+  description     String
+  confidenceScore Int                  @default(0) @map("confidence_score")
+  status          ReportStatus         @default(pending)
+  moderatedBy     String?              @map("moderated_by") @db.Uuid
+  moderatedAt     DateTime?            @map("moderated_at") @db.Timestamptz(6)
+  rejectReason    String?              @map("reject_reason")
+  duplicateOf     Int?                 @map("duplicate_of")
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  severity        IncidentSeverity     @default(low)
+  incidentId      Int?                 @map("incident_id")
+  auditLogs       ModerationAuditLog[]
+  votes           ReportVote[]
+  original        Report?              @relation("ReportDuplicates", fields: [duplicateOf], references: [id])
+  duplicates      Report[]             @relation("ReportDuplicates")
+  incident        Incidents?           @relation(fields: [incidentId], references: [id])
+  user            User?                @relation("UserReports", fields: [userId], references: [id])
 
   @@index([incidentId])
   @@index([userId], map: "idx_reports_user_id")
@@ -110,30 +99,28 @@ model Report {
 }
 
 model Incidents {
-
-  id            Int              @id @default(autoincrement())
-  checkpointId  Int?             @map("checkpoint_id")
-  reportedBy    String           @map("reported_by") @db.Uuid
-  moderadedBy   String?          @map("moderade_by") @db.Uuid
-  locationLat   Decimal          @map("location_lat") @db.Decimal(10, 8)
-  locationLng   Decimal          @map("location_lng") @db.Decimal(11, 8)
-  area          String?          @db.VarChar(255)
+  id            Int                     @id @default(autoincrement())
+  checkpointId  Int?                    @map("checkpoint_id")
+  reportedBy    String                  @map("reported_by") @db.Uuid
+  locationLat   Decimal                 @map("location_lat") @db.Decimal(10, 8)
+  locationLng   Decimal                 @map("location_lng") @db.Decimal(11, 8)
+  area          String?                 @db.VarChar(255)
   type          IncidentType
   severity      IncidentSeverity
-  description   String?          @db.Text
-  trafficStatus TrafficStatus    @default(unknown) @map("traffic_status")
-  status        IncidentStatus   @default(pending)
-  moderadeddAt  DateTime?        @map("moderaded_at")
-  resolvedAt    DateTime?        @map("resolved_at")
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
-
-  checkpoint    Checkpoints?            @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
-  reporter      User                    @relation("IncidentReporter", fields: [reportedBy], references: [id], onDelete: Cascade)
-  moderad       User?                   @relation("IncidentModerad", fields: [moderadedBy], references: [id], onDelete: SetNull)
-  reports       Report[]
+  description   String?
+  resolvedAt    DateTime?               @map("resolved_at")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+  trafficStatus TrafficStatus           @default(unknown) @map("traffic_status")
+  status        IncidentStatus          @default(pending)
+  moderadedBy   String?                 @map("moderade_by") @db.Uuid
+  moderadeddAt  DateTime?               @map("moderaded_at")
   statusHistory IncidentStatusHistory[]
-
+  checkpoint    Checkpoints?            @relation(fields: [checkpointId], references: [id])
+  moderad       User?                   @relation("IncidentModerad", fields: [moderadedBy], references: [id])
+  reporter      User                    @relation("IncidentReporter", fields: [reportedBy], references: [id], onDelete: Cascade)
+  reports       Report[]
+  alerts        Alert[]
   @@index([checkpointId], map: "idx_incidents_checkpoint_id")
   @@index([type], map: "idx_incidents_type")
   @@index([severity], map: "idx_incidents_severity")
@@ -144,33 +131,29 @@ model Incidents {
 }
 
 model IncidentStatusHistory {
-
   id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   incidentId Int           @map("incident_id")
   changedBy  String        @map("changed_by") @db.Uuid
   oldStatus  TrafficStatus @map("old_status")
   newStatus  TrafficStatus @map("new_status")
-  changedAt  DateTime      @default(now()) @db.Timestamptz(6)
   notes      String?
   oldValues  Json?         @map("old_values")
   newValues  Json?         @map("new_values")
-
-  incident Incidents @relation(fields: [incidentId], references: [id], onDelete: Cascade)
-  user     User      @relation(fields: [changedBy], references: [id], onDelete: Cascade)
+  changedAt  DateTime      @default(now()) @db.Timestamptz(6)
+  user       User          @relation(fields: [changedBy], references: [id], onDelete: Cascade)
+  incident   Incidents     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 
   @@map("incident_status_history")
 }
 
 model ReportVote {
-
   id        Int       @id @default(autoincrement())
   reportId  Int       @map("report_id")
   userId    String    @map("user_id") @db.Uuid
   vote      VoteValue
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  user   User   @relation("UserVotes", fields: [userId], references: [id], onDelete: Cascade)
+  report    Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user      User      @relation("UserVotes", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([reportId, userId], map: "unique_user_vote")
   @@index([reportId], map: "idx_report_votes_report_id")
@@ -179,59 +162,52 @@ model ReportVote {
 }
 
 model ModerationAuditLog {
-
   id          Int              @id @default(autoincrement())
   reportId    Int              @map("report_id")
   moderatorId String?          @map("moderator_id") @db.Uuid
   action      ModerationAction
   reason      String?
   createdAt   DateTime         @default(now()) @map("created_at")
-
-  report    Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  moderator User?  @relation("ModerationAuditModerator", fields: [moderatorId], references: [id], onDelete: SetNull)
+  moderator   User?            @relation("ModerationAuditModerator", fields: [moderatorId], references: [id])
+  report      Report           @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([createdAt(sort: Desc)], map: "idx_mod_audit_created_at")
   @@index([moderatorId], map: "idx_mod_audit_moderator_id")
   @@index([reportId], map: "idx_mod_audit_report_id")
   @@map("moderation_audit_log")
 }
-
 model AlertSubscription {
-
-  id               Int              @id @default(autoincrement())
-  userId           String           @map("user_id") @db.Uuid
-  areaLat          Decimal          @map("area_lat") @db.Decimal(10, 8)
-  areaLng          Decimal          @map("area_lng") @db.Decimal(11, 8)
-  radiusKm         Decimal          @default(5.0) @map("radius_km") @db.Decimal(5, 2)
-  incidentCategory IncidentCategory @map("incident_category")
-  isActive         Boolean          @default(true) @map("is_active")
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
+  id        Int      @id @default(autoincrement())
+  userId    String   @db.Uuid
+  areaLat   Decimal  @db.Decimal(10, 8)
+  areaLng   Decimal  @db.Decimal(11, 8)
+  radiusKm  Decimal  @default(10.0) @db.Decimal(5, 2)
+  category  String   @default("all")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   alerts Alert[]
 
+  @@index([userId])
   @@map("alert_subscriptions")
 }
 
 model Alert {
+  id             Int      @id @default(autoincrement())
+  incidentId     Int
+  subscriptionId Int
+  status         String   @default("pending")
+  sentAt         DateTime?
+  createdAt      DateTime @default(now())
 
-  id               Int              @id @default(autoincrement())
-  userId           String           @map("user_id") @db.Uuid
-  subscriptionId   Int              @map("subscription_id")
-  incidentCategory IncidentCategory @map("incident_category")
-  title            String           @db.VarChar(150)
-  message          String
-  status           AlertStatus      @default(unread)
-  createdAt        DateTime         @default(now()) @map("created_at")
-  readAt           DateTime?        @map("read_at")
-
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incident     Incidents         @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   subscription AlertSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
+  @@index([incidentId])
   @@map("alerts")
 }
-
 enum Role {
   user
   moderator
@@ -248,6 +224,8 @@ enum IncidentSeverity {
 enum IncidentStatus {
   pending
   verified
+  closed
+  rejected
 }
 
 enum IncidentType {
@@ -283,17 +261,4 @@ enum TrafficStatus {
 enum VoteValue {
   up
   down
-}
-
-enum IncidentCategory {
-  checkpoint
-  closure
-  delay
-  accident
-  weather_hazard
-}
-
-enum AlertStatus {
-  unread
-  read
 }

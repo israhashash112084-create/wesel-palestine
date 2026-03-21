@@ -8,17 +8,27 @@ export class AlertsService {
     this.alertsRepository = alertsRepository;
   }
 
-  async createSubscription(userId, data) {
-    const { areaLat, areaLng, radiusKm, incidentCategory } = data;
+  _mapIncidentTypeToCategory(type) {
+    const supportedCategories = ['checkpoint', 'closure', 'delay', 'accident', 'weather_hazard'];
 
-    return await this.alertsRepository.createSubscription({
-      userId,
-      areaLat,
-      areaLng,
-      radiusKm,
-      incidentCategory,
-    });
+    if (supportedCategories.includes(type)) {
+      return type;
+    }
+
+    return null;
   }
+
+  async createSubscription(userId, data) {
+  const { areaLat, areaLng, radiusKm, category } = data;
+
+  return await this.alertsRepository.createSubscription({
+    userId,
+    areaLat,
+    areaLng,
+    radiusKm,
+    category,
+  });
+}
 
   async getUserSubscriptions(userId) {
     return await this.alertsRepository.findSubscriptionsByUserId(userId);
@@ -61,10 +71,43 @@ export class AlertsService {
   async markAlertAsRead(userId, alertId) {
     const result = await this.alertsRepository.markAlertAsRead(alertId, userId);
 
-    if (!result.count) {
+    if (!result || !result.count) {
       throw new BadRequestError('Alert not found or already updated');
     }
 
     return { message: 'Alert marked as read successfully' };
   }
+
+  async handleNewIncident(incident) {
+
+  if (incident.status !== 'verified') {
+    return;
+  }
+
+  const category = this._mapIncidentTypeToCategory(incident.type);
+
+  if (!category) {
+    return;
+  }
+
+  const matchingSubscriptions =
+    await this.alertsRepository.findMatchingSubscriptionsForIncident({
+      category,
+    });
+
+  if (!matchingSubscriptions.length) {
+    return;
+  }
+
+  await Promise.all(
+    matchingSubscriptions.map((subscription) =>
+      this.alertsRepository.createAlert({
+        incidentId: incident.id,
+        subscriptionId: subscription.id,
+        status: 'pending',
+      })
+    )
+  );
+}
+  
 }

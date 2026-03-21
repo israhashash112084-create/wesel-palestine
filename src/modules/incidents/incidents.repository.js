@@ -6,7 +6,7 @@ export class IncidentsRepository {
       id: true,
       checkpointId: true,
       reportedBy: true,
-      VerifiedBy: true,
+      moderadedBy: true,
       locationLat: true,
       locationLng: true,
       area: true,
@@ -15,7 +15,7 @@ export class IncidentsRepository {
       severity: true,
       description: true,
       trafficStatus: true,
-      verifiedAt: true,
+      moderadeddAt: true,
       resolvedAt: true,
       createdAt: true,
       updatedAt: true,
@@ -33,13 +33,13 @@ export class IncidentsRepository {
           lastName: true,
         },
       },
-      verifier: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-        },
-      },
+      moderad: {
+       select: {
+       id: true,
+       firstName: true,
+       lastName: true,
+  },
+},
     };
   }
 
@@ -51,14 +51,7 @@ export class IncidentsRepository {
   }
 
   _normalizeRecord(record) {
-    const cleaned = this._removeNullValues(record);
-
-    if (Object.hasOwn(cleaned, 'VerifiedBy')) {
-      cleaned.verifiedBy = cleaned.VerifiedBy;
-      delete cleaned.VerifiedBy;
-    }
-
-    return cleaned;
+     return this._removeNullValues(record);
   }
 
   async create(data) {
@@ -66,7 +59,7 @@ export class IncidentsRepository {
       data: {
         checkpointId: data.checkpointId,
         reportedBy: data.reportedBy,
-        VerifiedBy: data.verifiedBy,
+        moderadedBy: data.moderadedBy,
         locationLat: data.locationLat,
         locationLng: data.locationLng,
         area: data.area,
@@ -75,7 +68,7 @@ export class IncidentsRepository {
         description: data.description,
         trafficStatus: data.trafficStatus,
         status: data.status,
-        verifiedAt: data.verifiedAt,
+        moderadeddAt: data.moderadeddAt,
       },
       select: this._baseSelect(),
     });
@@ -162,8 +155,8 @@ export class IncidentsRepository {
           severity: data.severity,
           description: data.description,
           status: data.status,
-          VerifiedBy: data.verifiedBy,
-          verifiedAt: data.verifiedAt,
+          moderadedBy: data.moderadedBy,
+          moderadeddAt: data.moderadeddAt,
           trafficStatus: data.trafficStatus,
           locationLat: data.locationLat,
           locationLng: data.locationLng,
