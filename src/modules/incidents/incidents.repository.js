@@ -44,14 +44,6 @@ export class IncidentsRepository {
     };
   }
 
-  _removeNullValues(record) {
-    return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== null));
-  }
-
-  _normalizeRecord(record) {
-    return this._removeNullValues(record);
-  }
-
   async create(data) {
     const incident = await prisma.incident.create({
       data: {
@@ -81,7 +73,7 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return this._normalizeRecord(incident);
+    return incident;
   }
 
   async findMany({
@@ -124,9 +116,7 @@ export class IncidentsRepository {
       return { incidents, total };
     });
 
-    const cleanedIncidents = incidents.map((incident) => this._normalizeRecord(incident));
-
-    return { incidents: cleanedIncidents, total };
+    return { incidents, total };
   }
 
   async findNearbyCandidates({ lat, lng, radiusMeters, type, severity, trafficStatus, status }) {
@@ -153,7 +143,7 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return incidents.map((incident) => this._normalizeRecord(incident));
+    return incidents;
   }
 
   async findById(id) {
@@ -162,7 +152,7 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return incident ? this._normalizeRecord(incident) : null;
+    return incident;
   }
 
   async update(id, data) {
@@ -179,7 +169,7 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return this._normalizeRecord(updatedIncident);
+    return updatedIncident;
   }
 
   async updateWithStatusHistory(id, data) {
@@ -221,28 +211,7 @@ export class IncidentsRepository {
 
       return incident;
     });
-    return this._normalizeRecord(updatedIncident);
-  }
-
-  _normalizeHistoryRecord(record) {
-    return {
-      id: record.id,
-      actor: {
-        id: record.user.id,
-        firstName: record.user.firstName,
-        lastName: record.user.lastName,
-      },
-      before: {
-        status: record.oldStatus,
-        values: record.oldValues ?? {},
-      },
-      after: {
-        status: record.newStatus,
-        values: record.newValues ?? {},
-      },
-      notes: record.notes ?? null,
-      timestamp: record.changedAt,
-    };
+    return updatedIncident;
   }
 
   async findStatusHistory(incidentId, { skip, take, sortBy, sortOrder }) {
@@ -278,7 +247,7 @@ export class IncidentsRepository {
     });
 
     return {
-      history: records.map((record) => this._normalizeHistoryRecord(record)),
+      history: records,
       total,
     };
   }
