@@ -1,5 +1,11 @@
 import Joi from 'joi';
 import { TRAFFIC_STATUSES } from '#shared/constants/enums.js';
+import {
+  pageQuerySchema,
+  limitQuerySchema,
+  sortOrderQuerySchema,
+  positiveIntegerIdSchema,
+} from '#shared/utils/query-validator.js';
 
 const trafficStatuses = Object.values(TRAFFIC_STATUSES);
 
@@ -26,14 +32,14 @@ export const listCheckpointsSchema = Joi.object({
   maxLng: longitudeBounds.greater(Joi.ref('minLng')).optional().messages({
     'number.greater': 'maxLng must be greater than minLng',
   }),
-  page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(10),
+  page: pageQuerySchema,
+  limit: limitQuerySchema,
   sortBy: Joi.string().valid('createdAt', 'name', 'status').default('createdAt'),
-  sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
+  sortOrder: sortOrderQuerySchema,
 });
 
 export const checkpointIdParamSchema = Joi.object({
-  id: Joi.number().integer().positive().required(),
+  id: positiveIntegerIdSchema,
 });
 
 export const createCheckpointSchema = Joi.object({
@@ -90,4 +96,11 @@ export const updateCheckpointStatusSchema = Joi.object({
     .valid(...trafficStatuses)
     .required(),
   notes: Joi.string().max(500).optional(),
+});
+
+export const checkpointStatusHistoryQuerySchema = Joi.object({
+  page: pageQuerySchema,
+  limit: limitQuerySchema,
+  sortBy: Joi.string().valid('changedAt').default('changedAt'),
+  sortOrder: sortOrderQuerySchema,
 });

@@ -56,6 +56,18 @@ export class CheckpointsController {
     });
   };
 
+  getCheckpointStatusHistory = async (req, res) => {
+    const history = await this.checkpointsService.getCheckpointStatusHistory(
+      parseInt(req.params.id, 10),
+      req.query
+    );
+
+    res.status(200).json({
+      success: true,
+      data: history,
+    });
+  };
+
   deleteCheckpoint = async (req, res) => {
     await this.checkpointsService.deleteCheckpoint(parseInt(req.params.id, 10), req.userInfo);
     res.status(204).send();

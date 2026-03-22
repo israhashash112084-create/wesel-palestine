@@ -208,6 +208,30 @@ export class CheckpointsService {
     });
   }
 
+  async getCheckpointStatusHistory(checkpointId, filters) {
+    const checkpoint = await this.repo.findById(checkpointId);
+
+    if (!checkpoint) {
+      throw new NotFoundError(`Checkpoint with id ${checkpointId}`);
+    }
+
+    const { page, limit, sortBy, sortOrder } = filters;
+    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+
+    const { history, total } = await this.repo.findStatusHistory(checkpointId, {
+      skip,
+      take,
+      sortBy,
+      sortOrder,
+    });
+
+    return {
+      checkpointId,
+      history,
+      pagination: buildPaginationMeta(total),
+    };
+  }
+
   async deleteCheckpoint(id, adminInfo) {
     const checkpoint = await this.repo.findById(id);
 

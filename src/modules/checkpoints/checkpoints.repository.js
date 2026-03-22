@@ -107,6 +107,27 @@ export class CheckpointsRepository {
     });
   }
 
+  _normalizeStatusHistoryRecord(record) {
+    return {
+      id: record.id,
+      actor: record.user
+        ? {
+            id: record.user.id,
+            firstName: record.user.firstName,
+            lastName: record.user.lastName,
+          }
+        : null,
+      before: {
+        status: record.oldStatus,
+      },
+      after: {
+        status: record.newStatus,
+      },
+      notes: record.notes ?? null,
+      timestamp: record.changedAt,
+    };
+  }
+
   async findMany({
     status,
     search,
@@ -181,6 +202,42 @@ export class CheckpointsRepository {
       where: { id },
       select: this._baseSelect(),
     });
+  }
+
+  async findStatusHistory(checkpointId, { skip, take, sortBy, sortOrder }) {
+    const { records, total } = await prismaTransaction(async (tx) => {
+      const records = await tx.checkpointStatusHistory.findMany({
+        where: { checkpointId },
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take,
+        select: {
+          id: true,
+          oldStatus: true,
+          newStatus: true,
+          notes: true,
+          changedAt: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      });
+
+      const total = await tx.checkpointStatusHistory.count({
+        where: { checkpointId },
+      });
+
+      return { records, total };
+    });
+
+    return {
+      history: records.map((record) => this._normalizeStatusHistoryRecord(record)),
+      total,
+    };
   }
 
   async updateByIdWithAudit(id, { data, audit, statusHistory }) {
