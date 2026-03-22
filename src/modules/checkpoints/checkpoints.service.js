@@ -1,5 +1,6 @@
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { NotFoundError } from '#shared/utils/errors.js';
+import { ConflictError } from '#shared/utils/errors.js';
 
 export class CheckpointsService {
   constructor(checkpointsRepository) {
@@ -29,6 +30,28 @@ export class CheckpointsService {
       checkpoints,
       pagination: buildPaginationMeta(total),
     };
+  }
+
+  async createCheckpoint(adminInfo, body) {
+    const { name, areaName, description, latitude, longitude, status } = body;
+
+    const existingCheckpoint = await this.repo.findByCoordinates(latitude, longitude);
+
+    if (existingCheckpoint) {
+      throw new ConflictError(
+        `Checkpoint already exists at coordinates (${latitude}, ${longitude})`
+      );
+    }
+
+    return this.repo.create({
+      name,
+      areaName,
+      description,
+      latitude,
+      longitude,
+      status,
+      createdBy: adminInfo.id,
+    });
   }
 
   async getCheckpointById(id) {

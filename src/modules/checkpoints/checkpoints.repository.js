@@ -102,6 +102,33 @@ export class CheckpointsRepository {
     };
   }
 
+  async findByCoordinates(latitude, longitude) {
+    return prisma.checkpoint.findFirst({
+      where: {
+        latitude,
+        longitude,
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
+
+  async create(data) {
+    return prisma.checkpoint.create({
+      data: {
+        name: data.name,
+        areaName: data.areaName,
+        description: data.description,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        ...(data.status && { status: data.status }),
+        createdBy: data.createdBy,
+      },
+      select: this._baseSelect(),
+    });
+  }
+
   async findById(id) {
     return prisma.checkpoint.findUnique({
       where: { id },

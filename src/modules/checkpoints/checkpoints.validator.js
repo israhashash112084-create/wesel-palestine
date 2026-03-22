@@ -35,3 +35,26 @@ export const listCheckpointsSchema = Joi.object({
 export const checkpointIdParamSchema = Joi.object({
   id: Joi.number().integer().positive().required(),
 });
+
+export const createCheckpointSchema = Joi.object({
+  name: Joi.string().min(2).max(100).required().messages({
+    'string.min': 'Checkpoint name must be at least 2 characters',
+    'string.max': 'Checkpoint name must not exceed 100 characters',
+    'any.required': 'Checkpoint name is required',
+  }),
+  areaName: Joi.string().max(100).optional().messages({
+    'string.max': 'Area name must not exceed 100 characters',
+  }),
+  description: Joi.string().max(1000).optional().messages({
+    'string.max': 'Description must not exceed 1000 characters',
+  }),
+  latitude: latitudeBounds.required().messages({
+    'any.required': 'Latitude is required',
+  }),
+  longitude: longitudeBounds.required().messages({
+    'any.required': 'Longitude is required',
+  }),
+  status: Joi.string()
+    .valid(...trafficStatuses)
+    .optional('unknown'),
+});
