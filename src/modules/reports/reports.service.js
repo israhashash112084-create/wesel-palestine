@@ -10,6 +10,8 @@ import { REPORT_STATUSES } from '#shared/constants/enums.js';
 import { IncidentsService } from '#modules/incidents/incidents.service.js';
 import { IncidentsRepository } from '#modules/incidents/incidents.repository.js';
 import { env } from '#config/env.js';
+import { scheduleAutoReject } from '#modules/reports/jobs/report.queue.js';
+import redisClient from '#shared/utils/radis.js';
 
 const MIN_VOTES_REQUIRED = 4;
 const AUTO_VERIFY_ABOVE = 0.7;
@@ -19,6 +21,43 @@ const incidentsRepository = new IncidentsRepository();
 const incidentsService = new IncidentsService(incidentsRepository);
 
 const systemUser = () => ({ id: env.SYSTEM_USER_ID });
+
+const CACHE_TTL_LIST = 60;
+const CACHE_TTL_SINGLE = 120;
+
+const _cacheKey = {
+  list: (filters) => `reports:list:${JSON.stringify(filters)}`,
+  single: (id) => `reports:single:${id}`,
+};
+
+const _getCache = async (key) => {
+  try {
+    const val = await redisClient.get(key);
+    return val ? JSON.parse(val) : null;
+  } catch {
+    return null;
+  }
+};
+
+const _setCache = async (key, value, ttl) => {
+  try {
+    await redisClient.set(key, JSON.stringify(value), { EX: ttl });
+  } catch {
+    /* fail silently — cache is best-effort */
+  }
+};
+
+const _invalidateReportCache = async (reportId) => {
+  try {
+    // Delete single report cache
+    await redisClient.del(_cacheKey.single(reportId));
+    // Delete all list caches — pattern delete
+    const keys = await redisClient.keys('reports:list:*');
+    if (keys.length > 0) await redisClient.del(keys);
+  } catch {
+    /* fail silently */
+  }
+};
 
 export class ReportsService {
   constructor(reportsRepository) {
@@ -59,18 +98,18 @@ export class ReportsService {
       locationLat,
       locationLng,
       type,
+      area,
     });
 
     if (userDuplicate) {
-      throw new ConflictError(
-        `You already submitted a similar report (#${userDuplicate.id}) in this area`
-      );
+      throw new ConflictError(`You already submitted a similar report (#${userDuplicate.id}) `);
     }
 
     const duplicate = await this.repo.findNearbyDuplicate({
       locationLat,
       locationLng,
       type,
+      area,
     });
 
     const incidentId = duplicate
@@ -102,6 +141,11 @@ export class ReportsService {
     if (duplicate) {
       await this.repo.incrementReportConfidenceScore(duplicate.id, 1);
     }
+    if (!duplicate) {
+      await scheduleAutoReject(report.id);
+    }
+
+    await _invalidateReportCache(report.id);
 
     return {
       report,
@@ -125,6 +169,13 @@ export class ReportsService {
     } else {
       statusFilter = isModerator ? undefined : { in: [REPORT_STATUSES.PENDING] };
     }
+
+    // Cache key includes role so mods and users get different cached responses
+    const role = isModerator ? 'mod' : 'user';
+    const cacheKey = _cacheKey.list({ ...filters, role });
+    const cached = await _getCache(cacheKey);
+    if (cached) return cached;
+
     const { reports, total } = await this.repo.findMany({
       status: statusFilter,
       type,
@@ -138,14 +189,26 @@ export class ReportsService {
       ...report,
       ...this._buildVoteInfo(report, userInfo),
     }));
-    return {
+    const result = {
       reports: reportsWithVoteInfo,
       pagination: buildPaginationMeta(total),
     };
+
+    await _setCache(cacheKey, result, CACHE_TTL_LIST);
+    return result;
   }
   async getReport(id, userInfo) {
-    const report = await this._findReportOrThrow(id);
     const isModerator = this._isModerator(userInfo);
+
+    // Cache key includes userId so each user gets their own cached view
+    // (owners see rejectReason, others don't)
+    const cacheKey = _cacheKey.single(
+      `${id}:${userInfo?.id ?? 'anon'}:${isModerator ? 'mod' : 'user'}`
+    );
+    const cached = await _getCache(cacheKey);
+    if (cached) return cached;
+
+    const report = await this._findReportOrThrow(id);
     const isOwner = userInfo?.id === report.userId;
 
     if (!isModerator && !isOwner) {
@@ -163,6 +226,7 @@ export class ReportsService {
       Object.assign(response, this._buildVoteInfo(report, userInfo));
     }
 
+    await _setCache(cacheKey, response, CACHE_TTL_SINGLE);
     return response;
   }
   async voteOnReport(reportId, userId, vote) {
@@ -182,7 +246,6 @@ export class ReportsService {
         `You already submitted a duplicate report (#${userDuplicate.id}) for this report. Your confirmation already counts`
       );
     }
-
     const { isNew, previousVote, currentVote } = await this.repo.upsertVote(reportId, userId, vote);
     const scoreChange = this._calcScoreChange(isNew, previousVote, currentVote);
     if (scoreChange !== 0) {
@@ -190,6 +253,7 @@ export class ReportsService {
       await this.repo.update(reportId, { confidenceScore: newScore });
     }
     await this._checkAutoDecision(report);
+    await _invalidateReportCache(reportId);
     return {
       message: isNew ? 'Vote submitted successfully' : 'Vote updated successfully',
       vote: currentVote,
@@ -202,10 +266,10 @@ export class ReportsService {
     const upRatio = upCount / total;
     if (upRatio >= AUTO_VERIFY_ABOVE) {
       const reason = `Auto-verified: ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
-      await this._approveReport(report.id, report, systemUser, reason);
+      await this._approveReport(report.id, report, systemUser().id, reason);
     } else if (upRatio < AUTO_REJECT_BELOW) {
       const reason = `Auto-rejected: only ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
-      await this._rejectReport(report.id, report, systemUser, reason);
+      await this._rejectReport(report.id, report, systemUser().id, reason);
     }
   }
   async _createIncidentFromReport(report) {
@@ -219,7 +283,7 @@ export class ReportsService {
         severity: report.severity,
         description: report.description,
         checkpointId: null,
-        trafficStatus: null,
+        trafficStatus: 'unknown',
       }
     );
 
@@ -241,6 +305,7 @@ export class ReportsService {
       locationLng,
       type,
       excludeId: reportId,
+      area,
     });
     const newDuplicateOf = newDuplicate ? newDuplicate.id : null;
     if (report.duplicateOf !== newDuplicateOf) {
@@ -260,6 +325,8 @@ export class ReportsService {
       description,
       duplicateOf: newDuplicateOf,
     });
+
+    await _invalidateReportCache(reportId);
 
     return {
       report: updatedReport,
@@ -319,11 +386,12 @@ export class ReportsService {
     );
 
     if (report.incidentId) {
-      const actor = moderatorId ? { id: moderatorId } : systemUser();
+      const actor = moderatorId ? { id: moderatorId } : { id: systemUser().id };
       await incidentsService.verifyIncident(report.incidentId, actor, reason ?? 'Auto-verified');
     }
 
     await this.repo.increaseReportOwnersScore(reportId);
+    await _invalidateReportCache(reportId);
   }
   async _rejectReport(reportId, report, moderatorId, reason) {
     await this.repo.update(reportId, {
@@ -341,10 +409,12 @@ export class ReportsService {
     );
 
     if (report.incidentId) {
-      const actor = moderatorId ? { id: moderatorId } : systemUser();
+      const actor = moderatorId ? { id: moderatorId } : { id: systemUser().id };
+
       await incidentsService.rejectIncident(report.incidentId, actor);
     }
 
     await this.repo.decreaseReportOwnersScore(reportId);
+    await _invalidateReportCache(reportId);
   }
 }

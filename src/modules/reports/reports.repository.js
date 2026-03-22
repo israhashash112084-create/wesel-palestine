@@ -95,7 +95,7 @@ export class ReportsRepository {
     return { reports: cleanedReports, total };
   }
 
-  async findNearbyDuplicate({ locationLat, locationLng, type, excludeId = null }) {
+  async findNearbyDuplicate({ locationLat, locationLng, type, area, excludeId = null }) {
     const windowSeconds = this._msToSeconds(DUPLICATE_TIME_WINDOW_MS);
     const rows = await query(
       `
@@ -103,17 +103,18 @@ export class ReportsRepository {
       FROM   reports
       WHERE  type            = $1
         AND  status          IN ('pending', 'verified')
+        AND area             =$3
         AND  duplicate_of    IS NULL
         AND  created_at      > NOW() - ($2 || ' seconds')::INTERVAL
         ${excludeId ? `AND id != ${excludeId}` : ''}
       `,
-      [type, windowSeconds]
+      [type, windowSeconds, area]
     );
 
     return this._findNearest(rows.rows, locationLat, locationLng, DUPLICATE_RADIUS_KM);
   }
 
-  async findUserDuplicateReport({ userId, locationLat, locationLng, type }) {
+  async findUserDuplicateReport({ userId, locationLat, locationLng, type, area }) {
     const windowSeconds = this._msToSeconds(USER_TIME_WINDOW_MS);
     const rows = await query(
       `
@@ -122,9 +123,10 @@ export class ReportsRepository {
     WHERE  user_id     = $1
       AND  type        = $2
       AND  status      != 'rejected'
+      AND area =$4
       AND  created_at  > NOW() - ($3 || ' seconds')::INTERVAL
     `,
-      [userId, type, windowSeconds]
+      [userId, type, windowSeconds, area]
     );
 
     return this._findNearest(rows.rows, locationLat, locationLng, DUPLICATE_RADIUS_KM);
