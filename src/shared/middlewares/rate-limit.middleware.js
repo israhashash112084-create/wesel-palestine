@@ -1,16 +1,17 @@
-import { rateLimit }         from 'express-rate-limit';
-import { RedisStore }        from 'rate-limit-redis';
-import redisClient           from '#shared/utils/radis.js';
+import { rateLimit } from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+import redisClient from '#shared/utils/radis.js';
 import { env } from '#config/env.js';
+import { ConflictError } from '#shared/utils/errors.js';
 /**
  * @param {{ max: number, windowSec: number, message?: string }} options
  */
 const createRateLimiter = ({ max, windowSec, message }) =>
   rateLimit({
-    windowMs:        windowSec * 1000,
+    windowMs: windowSec * 1000,
     max,
     standardHeaders: true,
-    legacyHeaders:   false,
+    legacyHeaders: false,
     store: new RedisStore({
       sendCommand: (...args) => redisClient.sendCommand(args),
     }),
@@ -24,9 +25,9 @@ const createRateLimiter = ({ max, windowSec, message }) =>
   });
 
 export const reportSubmitLimiter = createRateLimiter({
-  max:       parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
+  max: parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
   windowSec: parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 1000,
-  message:   `You can only submit ${env.RATE_LIMIT_MAX_REQUESTS} reports every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+  message: `You can only submit ${env.RATE_LIMIT_MAX_REQUESTS} reports every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
 
 export const routeEstimateLimiter = createRateLimiter({
