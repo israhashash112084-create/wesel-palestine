@@ -29,25 +29,9 @@ export const haversine = (from, to) => {
 export const distanceBetween = (lat1, lng1, lat2, lng2) =>
   haversine({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
 
-const _haversineRawKm = (from, to) => {
-  const R = 6371;
-  const dLat = ((to.lat - from.lat) * Math.PI) / 180;
-  const dLng = ((to.lng - from.lng) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((from.lat * Math.PI) / 180) *
-      Math.cos((to.lat * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
 export const kilometersToMeters = (kilometers) => kilometers * 1000;
 
 export const metersToKilometers = (meters) => meters / 1000;
-
-export const distanceBetweenMeters = (lat1, lng1, lat2, lng2) =>
-  kilometersToMeters(_haversineRawKm({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 }));
 
 export const getBoundingBoxByRadiusMeters = (lat, lng, radiusMeters) => {
   const latDelta = radiusMeters / 111320;
@@ -85,7 +69,9 @@ export const findNearestCandidateWithinRadiusMeters = ({
       continue;
     }
 
-    const distanceMeters = distanceBetweenMeters(originLat, originLng, candidateLat, candidateLng);
+    const distanceMeters = kilometersToMeters(
+      distanceBetween(originLat, originLng, candidateLat, candidateLng)
+    );
 
     if (distanceMeters < nearestDistanceMeters) {
       nearestDistanceMeters = distanceMeters;
