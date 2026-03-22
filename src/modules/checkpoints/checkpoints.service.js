@@ -1,10 +1,46 @@
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { NotFoundError } from '#shared/utils/errors.js';
 import { ConflictError } from '#shared/utils/errors.js';
+import { BadRequestError } from '#shared/utils/errors.js';
 
 export class CheckpointsService {
   constructor(checkpointsRepository) {
     this.repo = checkpointsRepository;
+  }
+
+  _toComparableValue(value) {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    if (typeof value === 'object' && typeof value.toString === 'function') {
+      return value.toString();
+    }
+
+    return value;
+  }
+
+  _buildAuditDiff(existingCheckpoint, body) {
+    const updatableFields = ['name', 'areaName', 'description', 'latitude', 'longitude', 'status'];
+
+    const oldValues = {};
+    const newValues = {};
+
+    for (const field of updatableFields) {
+      if (body[field] === undefined) {
+        continue;
+      }
+
+      const oldValue = this._toComparableValue(existingCheckpoint[field]);
+      const newValue = this._toComparableValue(body[field]);
+
+      if (oldValue !== newValue) {
+        oldValues[field] = oldValue;
+        newValues[field] = newValue;
+      }
+    }
+
+    return { oldValues, newValues };
   }
 
   async getAllCheckpoints(filters) {
@@ -43,14 +79,29 @@ export class CheckpointsService {
       );
     }
 
-    return this.repo.create({
-      name,
-      areaName,
-      description,
-      latitude,
-      longitude,
-      status,
-      createdBy: adminInfo.id,
+    return this.repo.createWithAudit({
+      data: {
+        name,
+        areaName,
+        description,
+        latitude,
+        longitude,
+        status,
+        createdBy: adminInfo.id,
+      },
+      audit: {
+        actorId: adminInfo.id,
+        action: 'created',
+        oldValues: null,
+        newValues: {
+          name,
+          areaName,
+          description,
+          latitude,
+          longitude,
+          status: status ?? 'open',
+        },
+      },
     });
   }
 
@@ -64,13 +115,70 @@ export class CheckpointsService {
     return checkpoint;
   }
 
-  async deleteCheckpoint(id) {
+  async updateCheckpoint(id, body, adminInfo) {
+    const existingCheckpoint = await this.repo.findById(id);
+
+    if (!existingCheckpoint) {
+      throw new NotFoundError(`Checkpoint with id ${id}`);
+    }
+
+    const targetLatitude = body.latitude ?? this._toComparableValue(existingCheckpoint.latitude);
+    const targetLongitude = body.longitude ?? this._toComparableValue(existingCheckpoint.longitude);
+
+    const conflictingCheckpoint = await this.repo.findByCoordinates(
+      targetLatitude,
+      targetLongitude
+    );
+
+    if (conflictingCheckpoint && conflictingCheckpoint.id !== id) {
+      throw new ConflictError(
+        `Checkpoint already exists at coordinates (${targetLatitude}, ${targetLongitude})`
+      );
+    }
+
+    const { oldValues, newValues } = this._buildAuditDiff(existingCheckpoint, body);
+
+    if (Object.keys(newValues).length === 0) {
+      throw new BadRequestError('No changes detected in update payload');
+    }
+
+    return this.repo.updateByIdWithAudit(id, {
+      data: {
+        name: body.name,
+        areaName: body.areaName,
+        description: body.description,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        status: body.status,
+      },
+      audit: {
+        actorId: adminInfo.id,
+        action: 'updated',
+        oldValues,
+        newValues,
+      },
+    });
+  }
+
+  async deleteCheckpoint(id, adminInfo) {
     const checkpoint = await this.repo.findById(id);
 
     if (!checkpoint) {
       throw new NotFoundError(`Checkpoint with id ${id}`);
     }
 
-    await this.repo.deleteById(id);
+    await this.repo.deleteByIdWithAudit(id, {
+      actorId: adminInfo.id,
+      action: 'deleted',
+      oldValues: {
+        name: checkpoint.name,
+        areaName: checkpoint.areaName,
+        description: checkpoint.description,
+        latitude: this._toComparableValue(checkpoint.latitude),
+        longitude: this._toComparableValue(checkpoint.longitude),
+        status: checkpoint.status,
+      },
+      newValues: null,
+    });
   }
 }

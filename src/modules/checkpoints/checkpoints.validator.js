@@ -56,5 +56,29 @@ export const createCheckpointSchema = Joi.object({
   }),
   status: Joi.string()
     .valid(...trafficStatuses)
-    .optional('unknown'),
+    .optional(TRAFFIC_STATUSES.UNKNOWN),
 });
+
+export const updateCheckpointSchema = Joi.object({
+  name: Joi.string().min(2).max(100).optional().messages({
+    'string.min': 'Checkpoint name must be at least 2 characters',
+    'string.max': 'Checkpoint name must not exceed 100 characters',
+  }),
+  areaName: Joi.string().max(100).optional().messages({
+    'string.max': 'Area name must not exceed 100 characters',
+  }),
+  description: Joi.string().max(1000).optional().messages({
+    'string.max': 'Description must not exceed 1000 characters',
+  }),
+  latitude: latitudeBounds.optional(),
+  longitude: longitudeBounds.optional(),
+  status: Joi.string()
+    .valid(...trafficStatuses)
+    .optional(),
+})
+  .and('latitude', 'longitude')
+  .min(1)
+  .messages({
+    'object.and': 'latitude and longitude must be provided together',
+    'object.min': 'At least one field must be provided for update',
+  });

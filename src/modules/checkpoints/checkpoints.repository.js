@@ -66,6 +66,35 @@ export class CheckpointsRepository {
     return where;
   }
 
+  _checkpointMutationData(data) {
+    return {
+      ...(data.name !== undefined && { name: data.name }),
+      ...(data.areaName !== undefined && { areaName: data.areaName }),
+      ...(data.description !== undefined && { description: data.description }),
+      ...(data.latitude !== undefined && { latitude: data.latitude }),
+      ...(data.longitude !== undefined && { longitude: data.longitude }),
+      ...(data.status !== undefined && { status: data.status }),
+      ...(data.createdBy !== undefined && { createdBy: data.createdBy }),
+    };
+  }
+
+  async _createAuditLog(
+    tx,
+    { checkpointId, checkpointRefId, actorId, action, reason, oldValues, newValues }
+  ) {
+    await tx.checkpointAuditLog.create({
+      data: {
+        checkpointId,
+        checkpointRefId,
+        actorId,
+        action,
+        reason: reason ?? null,
+        oldValues: oldValues ?? null,
+        newValues: newValues ?? null,
+      },
+    });
+  }
+
   async findMany({
     status,
     search,
@@ -114,18 +143,24 @@ export class CheckpointsRepository {
     });
   }
 
-  async create(data) {
-    return prisma.checkpoint.create({
-      data: {
-        name: data.name,
-        areaName: data.areaName,
-        description: data.description,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        ...(data.status && { status: data.status }),
-        createdBy: data.createdBy,
-      },
-      select: this._baseSelect(),
+  async createWithAudit({ data, audit }) {
+    return prismaTransaction(async (tx) => {
+      const createdCheckpoint = await tx.checkpoint.create({
+        data: this._checkpointMutationData(data),
+        select: this._baseSelect(),
+      });
+
+      await this._createAuditLog(tx, {
+        checkpointId: createdCheckpoint.id,
+        checkpointRefId: createdCheckpoint.id,
+        actorId: audit.actorId,
+        action: audit.action,
+        reason: audit.reason,
+        oldValues: audit.oldValues,
+        newValues: audit.newValues,
+      });
+
+      return createdCheckpoint;
     });
   }
 
@@ -136,9 +171,43 @@ export class CheckpointsRepository {
     });
   }
 
-  async deleteById(id) {
-    return prisma.checkpoint.delete({
-      where: { id },
+  async updateByIdWithAudit(id, { data, audit }) {
+    return prismaTransaction(async (tx) => {
+      const updatedCheckpoint = await tx.checkpoint.update({
+        where: { id },
+        data: this._checkpointMutationData(data),
+        select: this._baseSelect(),
+      });
+
+      await this._createAuditLog(tx, {
+        checkpointId: id,
+        checkpointRefId: id,
+        actorId: audit.actorId,
+        action: audit.action,
+        reason: audit.reason,
+        oldValues: audit.oldValues,
+        newValues: audit.newValues,
+      });
+
+      return updatedCheckpoint;
+    });
+  }
+
+  async deleteByIdWithAudit(id, audit) {
+    return prismaTransaction(async (tx) => {
+      await this._createAuditLog(tx, {
+        checkpointId: id,
+        checkpointRefId: id,
+        actorId: audit.actorId,
+        action: audit.action,
+        reason: audit.reason,
+        oldValues: audit.oldValues,
+        newValues: audit.newValues,
+      });
+
+      await tx.checkpoint.delete({
+        where: { id },
+      });
     });
   }
 }

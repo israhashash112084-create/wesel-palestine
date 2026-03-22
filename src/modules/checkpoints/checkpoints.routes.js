@@ -9,6 +9,7 @@ import {
   listCheckpointsSchema,
   checkpointIdParamSchema,
   createCheckpointSchema,
+  updateCheckpointSchema,
 } from './checkpoints.validator.js';
 
 const router = Router();
@@ -37,6 +38,15 @@ router.get(
   authenticate,
   validateRequest(checkpointIdParamSchema, 'params'),
   checkpointsController.getCheckpointById
+);
+
+router.patch(
+  '/:id',
+  authenticate,
+  authorize(UserRoles.ADMIN),
+  validateRequest(checkpointIdParamSchema, 'params'),
+  validateRequest(updateCheckpointSchema, 'body'),
+  checkpointsController.updateCheckpoint
 );
 
 router.delete(
