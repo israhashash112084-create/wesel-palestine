@@ -3,24 +3,33 @@ import { INCIDENT_TYPES } from '#shared/constants/enums.js';
 import { INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
 import { TRAFFIC_STATUSES } from '#shared/constants/enums.js';
 import { INCIDENT_STATUSES } from '#shared/constants/enums.js';
+import {
+  pageQuerySchema,
+  limitQuerySchema,
+  sortOrderQuerySchema,
+  positiveIntegerSchema,
+  positiveIntegerIdSchema,
+  westBankLatitudeSchema,
+  westBankLongitudeSchema,
+} from '#shared/utils/query-validator.js';
 
 const incidentTypes = Object.values(INCIDENT_TYPES);
 const incidentSeverities = Object.values(INCIDENT_SEVERITIES);
 const trafficStatuses = Object.values(TRAFFIC_STATUSES);
 const incidentStatuses = Object.values(INCIDENT_STATUSES);
 
+const locationLatSchema = westBankLatitudeSchema.messages({
+  'any.required': 'Location latitude is required',
+});
+
+const locationLngSchema = westBankLongitudeSchema.messages({
+  'any.required': 'Location longitude is required',
+});
+
 export const createIncidentSchema = Joi.object({
-  checkpointId: Joi.number().integer().positive().optional(),
-  locationLat: Joi.number().min(31.2).max(32.6).required().messages({
-    'number.min': 'Lat Location must be within the West Bank boundaries [31.2, 32.6]',
-    'number.max': 'Lat Location must be within the West Bank boundaries [31.2, 32.6]',
-    'any.required': 'Location latitude is required',
-  }),
-  locationLng: Joi.number().min(34.9).max(35.6).required().messages({
-    'number.min': 'Lng Location must be within the West Bank boundaries [34.9, 35.6]',
-    'number.max': 'Lng Location must be within the West Bank boundaries [34.9, 35.6]',
-    'any.required': 'Location longitude is required',
-  }),
+  checkpointId: positiveIntegerSchema.optional(),
+  locationLat: locationLatSchema.required(),
+  locationLng: locationLngSchema.required(),
   area: Joi.string().max(100).optional(),
   type: Joi.string()
     .max(100)
@@ -36,7 +45,7 @@ export const createIncidentSchema = Joi.object({
 });
 
 export const incidentIdParamSchema = Joi.object({
-  id: Joi.number().integer().positive().required(),
+  id: positiveIntegerIdSchema,
 });
 
 export const updateIncidentBodySchema = Joi.object({
@@ -47,16 +56,8 @@ export const updateIncidentBodySchema = Joi.object({
   trafficStatus: Joi.string()
     .valid(...trafficStatuses)
     .optional(),
-  locationLat: Joi.number().min(31.2).max(32.6).optional().messages({
-    'number.min': 'Lat Location must be within the West Bank boundaries [31.2, 32.6]',
-    'number.max': 'Lat Location must be within the West Bank boundaries [31.2, 32.6]',
-    'any.required': 'Location latitude is required',
-  }),
-  locationLng: Joi.number().min(34.9).max(35.6).optional().messages({
-    'number.min': 'Lng Location must be within the West Bank boundaries [34.9, 35.6]',
-    'number.max': 'Lng Location must be within the West Bank boundaries [34.9, 35.6]',
-    'any.required': 'Location longitude is required',
-  }),
+  locationLat: locationLatSchema.optional(),
+  locationLng: locationLngSchema.optional(),
   type: Joi.string()
     .max(100)
     .optional()
@@ -74,34 +75,30 @@ export const listIncidentsSchema = Joi.object({
   trafficStatus: Joi.string()
     .valid(...trafficStatuses)
     .optional(),
-  checkpointId: Joi.number().integer().positive().optional(),
-  reportedBy: Joi.number().integer().positive().optional(),
+  checkpointId: positiveIntegerSchema.optional(),
+  reportedBy: positiveIntegerSchema.optional(),
   fromDate: Joi.date().iso().optional(),
   toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
     'date.greater': 'toDate must be greater than fromDate',
   }),
-  page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(10),
+  page: pageQuerySchema,
+  limit: limitQuerySchema,
   sortBy: Joi.string().valid('createdAt', 'severity').default('createdAt'),
-  sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
+  sortOrder: sortOrderQuerySchema,
 });
 
 export const incidentHistoryQuerySchema = Joi.object({
-  page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(10),
+  page: pageQuerySchema,
+  limit: limitQuerySchema,
   sortBy: Joi.string().valid('changedAt').default('changedAt'),
-  sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
+  sortOrder: sortOrderQuerySchema,
 });
 
 export const nearbyIncidentsSchema = Joi.object({
-  lat: Joi.number().min(31.2).max(32.6).required().messages({
-    'number.min': 'Latitude must be within the West Bank boundaries [31.2, 32.6]',
-    'number.max': 'Latitude must be within the West Bank boundaries [31.2, 32.6]',
+  lat: westBankLatitudeSchema.required().messages({
     'any.required': 'Latitude is required',
   }),
-  lng: Joi.number().min(34.9).max(35.6).required().messages({
-    'number.min': 'Longitude must be within the West Bank boundaries [34.9, 35.6]',
-    'number.max': 'Longitude must be within the West Bank boundaries [34.9, 35.6]',
+  lng: westBankLongitudeSchema.required().messages({
     'any.required': 'Longitude is required',
   }),
   radiusMeters: Joi.number().integer().min(1).max(50000).default(500),
@@ -117,7 +114,7 @@ export const nearbyIncidentsSchema = Joi.object({
   status: Joi.string()
     .valid(...incidentStatuses)
     .optional(),
-  page: Joi.number().integer().min(1).default(1),
+  page: pageQuerySchema,
   limit: Joi.number().integer().min(1).max(50).default(10),
   sortBy: Joi.string().valid('distance', 'createdAt', 'severity').default('distance'),
   sortOrder: Joi.string().valid('asc', 'desc').default('asc'),
