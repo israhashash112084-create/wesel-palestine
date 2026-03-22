@@ -44,6 +44,50 @@ export class IncidentsRepository {
     };
   }
 
+  _buildWhere({
+    type,
+    severity,
+    trafficStatus,
+    checkpointId,
+    reportedBy,
+    status,
+    fromDate,
+    toDate,
+    minLat,
+    maxLat,
+    minLng,
+    maxLng,
+  }) {
+    const where = {};
+
+    if (type) where.type = type;
+    if (severity) where.severity = severity;
+    if (trafficStatus) where.trafficStatus = trafficStatus;
+    if (checkpointId) where.checkpointId = checkpointId;
+    if (reportedBy) where.reportedBy = reportedBy;
+    if (status) where.status = status;
+
+    if (fromDate || toDate) {
+      where.createdAt = {};
+      if (fromDate) where.createdAt.gte = new Date(fromDate);
+      if (toDate) where.createdAt.lte = new Date(toDate);
+    }
+
+    if (minLat !== undefined || maxLat !== undefined) {
+      where.locationLat = {};
+      if (minLat !== undefined) where.locationLat.gte = minLat;
+      if (maxLat !== undefined) where.locationLat.lte = maxLat;
+    }
+
+    if (minLng !== undefined || maxLng !== undefined) {
+      where.locationLng = {};
+      if (minLng !== undefined) where.locationLng.gte = minLng;
+      if (maxLng !== undefined) where.locationLng.lte = maxLng;
+    }
+
+    return where;
+  }
+
   async create(data) {
     const incident = await prisma.incident.create({
       data: {
@@ -89,18 +133,15 @@ export class IncidentsRepository {
     sortBy,
     sortOrder,
   }) {
-    const where = {};
-
-    if (type) where.type = type;
-    if (severity) where.severity = severity;
-    if (trafficStatus) where.trafficStatus = trafficStatus;
-    if (checkpointId) where.checkpointId = checkpointId;
-    if (reportedBy) where.reportedBy = reportedBy;
-    if (fromDate || toDate) {
-      where.createdAt = {};
-      if (fromDate) where.createdAt.gte = new Date(fromDate);
-      if (toDate) where.createdAt.lte = new Date(toDate);
-    }
+    const where = this._buildWhere({
+      type,
+      severity,
+      trafficStatus,
+      checkpointId,
+      reportedBy,
+      fromDate,
+      toDate,
+    });
 
     const { incidents, total } = await prismaTransaction(async (tx) => {
       const incidents = await tx.incident.findMany({
@@ -122,21 +163,16 @@ export class IncidentsRepository {
   async findNearbyCandidates({ lat, lng, radiusMeters, type, severity, trafficStatus, status }) {
     const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(lat, lng, radiusMeters);
 
-    const where = {
-      locationLat: {
-        gte: minLat,
-        lte: maxLat,
-      },
-      locationLng: {
-        gte: minLng,
-        lte: maxLng,
-      },
-    };
-
-    if (type) where.type = type;
-    if (severity) where.severity = severity;
-    if (trafficStatus) where.trafficStatus = trafficStatus;
-    if (status) where.status = status;
+    const where = this._buildWhere({
+      type,
+      severity,
+      trafficStatus,
+      status,
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+    });
 
     const incidents = await prisma.incident.findMany({
       where,
