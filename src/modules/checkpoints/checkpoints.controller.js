@@ -29,4 +29,9 @@ export class CheckpointsController {
       data: checkpoint,
     });
   };
+
+  deleteCheckpoint = async (req, res) => {
+    await this.checkpointsService.deleteCheckpoint(parseInt(req.params.id, 10));
+    res.status(204).send();
+  };
 }

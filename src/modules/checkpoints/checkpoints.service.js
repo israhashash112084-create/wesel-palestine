@@ -63,4 +63,14 @@ export class CheckpointsService {
 
     return checkpoint;
   }
+
+  async deleteCheckpoint(id) {
+    const checkpoint = await this.repo.findById(id);
+
+    if (!checkpoint) {
+      throw new NotFoundError(`Checkpoint with id ${id}`);
+    }
+
+    await this.repo.deleteById(id);
+  }
 }

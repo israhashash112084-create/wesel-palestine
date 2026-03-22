@@ -135,4 +135,10 @@ export class CheckpointsRepository {
       select: this._baseSelect(),
     });
   }
+
+  async deleteById(id) {
+    return prisma.checkpoint.delete({
+      where: { id },
+    });
+  }
 }

@@ -39,4 +39,12 @@ router.get(
   checkpointsController.getCheckpointById
 );
 
+router.delete(
+  '/:id',
+  authenticate,
+  authorize(UserRoles.ADMIN),
+  validateRequest(checkpointIdParamSchema, 'params'),
+  checkpointsController.deleteCheckpoint
+);
+
 export default router;
