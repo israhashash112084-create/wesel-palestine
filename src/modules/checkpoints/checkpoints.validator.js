@@ -56,7 +56,8 @@ export const createCheckpointSchema = Joi.object({
   }),
   status: Joi.string()
     .valid(...trafficStatuses)
-    .optional(TRAFFIC_STATUSES.UNKNOWN),
+    .optional()
+    .default(TRAFFIC_STATUSES.UNKNOWN),
 });
 
 export const updateCheckpointSchema = Joi.object({
@@ -75,6 +76,7 @@ export const updateCheckpointSchema = Joi.object({
   status: Joi.string()
     .valid(...trafficStatuses)
     .optional(),
+  notes: Joi.string().max(500).optional(),
 })
   .and('latitude', 'longitude')
   .min(1)
@@ -82,3 +84,10 @@ export const updateCheckpointSchema = Joi.object({
     'object.and': 'latitude and longitude must be provided together',
     'object.min': 'At least one field must be provided for update',
   });
+
+export const updateCheckpointStatusSchema = Joi.object({
+  status: Joi.string()
+    .valid(...trafficStatuses)
+    .required(),
+  notes: Joi.string().max(500).optional(),
+});

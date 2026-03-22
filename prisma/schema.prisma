@@ -34,6 +34,7 @@ model User {
   checkpoint Checkpoint[]
   refreshTokens RefreshToken[]
   statusHistory IncidentStatusHistory[]
+  checkpointStatusHistory CheckpointStatusHistory[] @relation("CheckpointStatusHistoryUser")
 
   reports             Report[]             @relation("UserReports")
   reportVotes         ReportVote[]         @relation("UserVotes")
@@ -63,8 +64,28 @@ model Checkpoint {
   user        User?         @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   incidents   Incident[]
   auditLogs   CheckpointAuditLog[]
+  statusHistory CheckpointStatusHistory[]
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
+}
+
+model CheckpointStatusHistory {
+  @@map("checkpoint_status_history")
+
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  checkpointId Int           @map("checkpoint_id")
+  changedBy    String?       @map("changed_by") @db.Uuid
+  oldStatus    TrafficStatus @map("old_status")
+  newStatus    TrafficStatus @map("new_status")
+  notes        String?
+  changedAt    DateTime      @default(now()) @map("changed_at") @db.Timestamptz(6)
+
+  checkpoint Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  user       User?      @relation("CheckpointStatusHistoryUser", fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@index([checkpointId], map: "idx_checkpoint_status_history_checkpoint_id")
+  @@index([changedBy], map: "idx_checkpoint_status_history_changed_by")
+  @@index([changedAt(sort: Desc)], map: "idx_checkpoint_status_history_changed_at")
 }
 
 enum CheckpointAuditAction {

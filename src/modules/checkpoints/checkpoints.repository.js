@@ -95,6 +95,18 @@ export class CheckpointsRepository {
     });
   }
 
+  async _createStatusHistoryLog(tx, { checkpointId, changedBy, oldStatus, newStatus, notes }) {
+    await tx.checkpointStatusHistory.create({
+      data: {
+        checkpointId,
+        changedBy,
+        oldStatus,
+        newStatus,
+        notes: notes ?? null,
+      },
+    });
+  }
+
   async findMany({
     status,
     search,
@@ -171,13 +183,23 @@ export class CheckpointsRepository {
     });
   }
 
-  async updateByIdWithAudit(id, { data, audit }) {
+  async updateByIdWithAudit(id, { data, audit, statusHistory }) {
     return prismaTransaction(async (tx) => {
       const updatedCheckpoint = await tx.checkpoint.update({
         where: { id },
         data: this._checkpointMutationData(data),
         select: this._baseSelect(),
       });
+
+      if (statusHistory) {
+        await this._createStatusHistoryLog(tx, {
+          checkpointId: id,
+          changedBy: statusHistory.changedBy,
+          oldStatus: statusHistory.oldStatus,
+          newStatus: statusHistory.newStatus,
+          notes: statusHistory.notes,
+        });
+      }
 
       await this._createAuditLog(tx, {
         checkpointId: id,

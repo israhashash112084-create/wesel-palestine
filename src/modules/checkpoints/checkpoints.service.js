@@ -122,18 +122,21 @@ export class CheckpointsService {
       throw new NotFoundError(`Checkpoint with id ${id}`);
     }
 
-    const targetLatitude = body.latitude ?? this._toComparableValue(existingCheckpoint.latitude);
-    const targetLongitude = body.longitude ?? this._toComparableValue(existingCheckpoint.longitude);
+    if (body.latitude !== undefined || body.longitude !== undefined) {
+      const targetLatitude = body.latitude ?? this._toComparableValue(existingCheckpoint.latitude);
+      const targetLongitude =
+        body.longitude ?? this._toComparableValue(existingCheckpoint.longitude);
 
-    const conflictingCheckpoint = await this.repo.findByCoordinates(
-      targetLatitude,
-      targetLongitude
-    );
-
-    if (conflictingCheckpoint && conflictingCheckpoint.id !== id) {
-      throw new ConflictError(
-        `Checkpoint already exists at coordinates (${targetLatitude}, ${targetLongitude})`
+      const conflictingCheckpoint = await this.repo.findByCoordinates(
+        targetLatitude,
+        targetLongitude
       );
+
+      if (conflictingCheckpoint && conflictingCheckpoint.id !== id) {
+        throw new ConflictError(
+          `Checkpoint already exists at coordinates (${targetLatitude}, ${targetLongitude})`
+        );
+      }
     }
 
     const { oldValues, newValues } = this._buildAuditDiff(existingCheckpoint, body);
@@ -141,6 +144,16 @@ export class CheckpointsService {
     if (Object.keys(newValues).length === 0) {
       throw new BadRequestError('No changes detected in update payload');
     }
+
+    const statusHistory =
+      newValues.status !== undefined
+        ? {
+            changedBy: adminInfo.id,
+            oldStatus: existingCheckpoint.status,
+            newStatus: newValues.status,
+            notes: body.notes,
+          }
+        : null;
 
     return this.repo.updateByIdWithAudit(id, {
       data: {
@@ -156,6 +169,41 @@ export class CheckpointsService {
         action: 'updated',
         oldValues,
         newValues,
+      },
+      statusHistory,
+    });
+  }
+
+  async updateCheckpointStatus(id, body, adminInfo) {
+    const existingCheckpoint = await this.repo.findById(id);
+
+    if (!existingCheckpoint) {
+      throw new NotFoundError(`Checkpoint with id ${id}`);
+    }
+
+    if (existingCheckpoint.status === body.status) {
+      throw new BadRequestError('Checkpoint status is already set to the requested value');
+    }
+
+    return this.repo.updateByIdWithAudit(id, {
+      data: {
+        status: body.status,
+      },
+      audit: {
+        actorId: adminInfo.id,
+        action: 'updated',
+        oldValues: {
+          status: existingCheckpoint.status,
+        },
+        newValues: {
+          status: body.status,
+        },
+      },
+      statusHistory: {
+        changedBy: adminInfo.id,
+        oldStatus: existingCheckpoint.status,
+        newStatus: body.status,
+        notes: body.notes,
       },
     });
   }
