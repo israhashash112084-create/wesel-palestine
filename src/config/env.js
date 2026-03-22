@@ -32,8 +32,15 @@ export const env = {
   REDIS_HOST: optional('REDIS_HOST', 'localhost'),
   REDIS_PORT: optional('REDIS_PORT', '6379'),
   REDIS_PASSWORD: optional('REDIS_PASSWORD', ''),
-  RATE_LIMIT_WINDOW_MS: optional('RATE_LIMIT_WINDOW_MS', '600000'),
-  RATE_LIMIT_MAX_REQUESTS: optional('RATE_LIMIT_MAX_REQUESTS', '10'),
+  RATE_LIMIT_WINDOW_MS:      optional('RATE_LIMIT_WINDOW_MS', '600000'),
+  RATE_LIMIT_MAX_REQUESTS:   optional('RATE_LIMIT_MAX_REQUESTS', '10'),
+  ROUTE_LIMIT_MAX_REQUESTS: optional('ROUTE_LIMIT_MAX_REQUESTS', '10'),
+  ROUTE_LIMIT_WINDOW_MS:    optional('ROUTE_LIMIT_WINDOW_MS', '60000'),
+
+  OSRM_BASE_URL: optional('OSRM_BASE_URL', 'http://router.project-osrm.org'),
+
+  WEATHER_API_KEY: required('WEATHER_API_KEY'),
+  WEATHER_API_URL: optional('WEATHER_API_URL', 'https://api.openweathermap.org/data/2.5'),
 
   AREA_REPORT_LIMIT_MAX: optional('AREA_REPORT_LIMIT_MAX', '3'),
   AREA_REPORT_LIMIT_TTL_SEC: optional('AREA_REPORT_LIMIT_TTL_SEC', '21600'),

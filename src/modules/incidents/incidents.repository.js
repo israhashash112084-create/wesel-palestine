@@ -52,7 +52,7 @@ export class IncidentsRepository {
   }
 
   async create(data) {
-    const incident = await prisma.incidents.create({
+    const incident = await prisma.incident.create({
       data: {
         ...(data.checkpointId && {
           checkpoint: {
@@ -110,7 +110,7 @@ export class IncidentsRepository {
     }
 
     const { incidents, total } = await prismaTransaction(async (tx) => {
-      const incidents = await tx.incidents.findMany({
+      const incidents = await tx.incident.findMany({
         where,
         orderBy: { [sortBy]: sortOrder },
         skip,
@@ -118,7 +118,7 @@ export class IncidentsRepository {
         select: this._baseSelect(),
       });
 
-      const total = await tx.incidents.count({ where });
+      const total = await tx.incident.count({ where });
 
       return { incidents, total };
     });
@@ -129,7 +129,7 @@ export class IncidentsRepository {
   }
 
   async findById(id) {
-    const incident = await prisma.incidents.findUnique({
+    const incident = await prisma.incident.findUnique({
       where: { id },
       select: this._baseSelect(),
     });
@@ -138,7 +138,7 @@ export class IncidentsRepository {
   }
 
   async update(id, data) {
-    const updatedIncident = await prisma.incidents.update({
+    const updatedIncident = await prisma.incident.update({
       where: { id },
       data: {
         severity: data.severity,
@@ -156,7 +156,7 @@ export class IncidentsRepository {
 
   async updateWithStatusHistory(id, data) {
     const updatedIncident = await prismaTransaction(async (tx) => {
-      const incident = await tx.incidents.update({
+      const incident = await tx.incident.update({
         where: { id },
         data: {
           severity: data.severity,
