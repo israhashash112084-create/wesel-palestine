@@ -46,3 +46,11 @@ export const VOTE_VALUES = {
   UP: 'up',
   DOWN: 'down',
 };
+
+export const API_SERVICES = {
+  OSRM:           'osrm',
+  OPENWEATHERMAP: 'openweathermap',
+};
+
+
+

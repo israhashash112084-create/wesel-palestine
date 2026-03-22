@@ -320,3 +320,68 @@ enum ModerationAction {
   approved
   rejected
 }
+
+enum ApiService {
+  osrm
+  openweathermap
+
+  @@map("api_service")
+}
+
+model RouteCache {
+  id           Int      @id @default(autoincrement())
+  cacheKey     String   @unique @db.VarChar(64)  @map("cache_key")
+  fromLat      Decimal  @db.Decimal(10, 8)        @map("from_lat")
+  fromLng      Decimal  @db.Decimal(11, 8)        @map("from_lng")
+  toLat        Decimal  @db.Decimal(10, 8)        @map("to_lat")
+  toLng        Decimal  @db.Decimal(11, 8)        @map("to_lng")
+  responseData Json                                @map("response_data")
+  hitCount     Int      @default(1)               @map("hit_count")
+  expiresAt    DateTime                            @map("expires_at")
+  createdAt    DateTime @default(now())            @map("created_at")
+  updatedAt    DateTime @updatedAt                 @map("updated_at")
+
+  @@index([cacheKey])
+  @@index([expiresAt])
+  @@map("route_cache")
+}
+
+model ExternalApiLog {
+  id             Int        @id @default(autoincrement())
+  service        ApiService
+  endpoint       String     @db.VarChar(255)
+  statusCode     Int?                               @map("status_code")
+  responseTimeMs Int?                               @map("response_time_ms")
+  isFallback     Boolean    @default(false)         @map("is_fallback")
+  errorMessage   String?    @db.Text                @map("error_message")
+  createdAt      DateTime   @default(now())         @map("created_at")
+
+  @@index([service])
+  @@index([isFallback])
+  @@index([createdAt(sort: Desc)])
+  @@map("external_api_logs")
+}
+
+model RouteHistory {
+  id                   Int      @id @default(autoincrement())
+  userId               String   @db.Uuid @map("user_id")
+
+  fromLat              Decimal  @db.Decimal(10, 8) @map("from_lat")
+  fromLng              Decimal  @db.Decimal(11, 8) @map("from_lng")
+  toLat                Decimal  @db.Decimal(10, 8) @map("to_lat")
+  toLng                Decimal  @db.Decimal(11, 8) @map("to_lng")
+
+  distanceKm           Decimal  @db.Decimal(8, 2) @map("distance_km")
+  baseDurationMinutes  Decimal  @db.Decimal(8, 2) @map("base_duration_minutes")
+  finalDurationMinutes Decimal  @db.Decimal(8, 2) @map("final_duration_minutes")
+  totalDelayMinutes    Int      @map("total_delay_minutes")
+
+  isFallback           Boolean  @default(false) @map("is_fallback")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_route_history_user_id")
+  @@index([createdAt(sort: Desc)], map: "idx_route_history_created_at")
+  @@map("route_history")
+}

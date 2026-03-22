@@ -30,26 +30,8 @@ export const reportSubmitLimiter = createRateLimiter({
   message: `You can only submit ${env.RATE_LIMIT_MAX_REQUESTS} reports every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
 
-export const areaReportLimiter = async (req, _res, next) => {
-  const userId = req.userInfo.id;
-  const area = req.body.area.trim().toLowerCase();
-  const key = `area_report_limit:${userId}:${area}`;
-
-  const count = await redisClient.incr(key);
-
-  if (count === 1) {
-    await redisClient.expire(key, env.AREA_REPORT_LIMIT_TTL_SEC);
-  }
-
-  if (count > env.AREA_REPORT_LIMIT_MAX) {
-    const ttl = await redisClient.ttl(key);
-    const hoursLeft = Math.ceil(ttl / 3600);
-
-    throw new ConflictError(
-      `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} reports for "${req.body.area}". ` +
-        `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
-    );
-  }
-
-  next();
-};
+export const routeEstimateLimiter = createRateLimiter({
+  max:       parseInt(env.ROUTE_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 1000,
+  message:   `Too many route requests. You can only request ${env.ROUTE_LIMIT_MAX_REQUESTS} routes every ${parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
