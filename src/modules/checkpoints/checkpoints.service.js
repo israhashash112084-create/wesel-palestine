@@ -2,10 +2,12 @@ import { getPaginationParams } from '#shared/utils/pagination.js';
 import { NotFoundError } from '#shared/utils/errors.js';
 import { ConflictError } from '#shared/utils/errors.js';
 import { BadRequestError } from '#shared/utils/errors.js';
+import { DUPLICATE_RADIUS_METERS } from '#shared/constants/duplicate-detection.js';
 
 export class CheckpointsService {
   constructor(checkpointsRepository) {
     this.repo = checkpointsRepository;
+    this.duplicateRadiusMeters = DUPLICATE_RADIUS_METERS.checkpoints;
   }
 
   _toComparableValue(value) {
@@ -71,11 +73,15 @@ export class CheckpointsService {
   async createCheckpoint(adminInfo, body) {
     const { name, areaName, description, latitude, longitude, status } = body;
 
-    const existingCheckpoint = await this.repo.findByCoordinates(latitude, longitude);
+    const existingCheckpoint = await this.repo.findNearestByLocationWithinRadius(
+      latitude,
+      longitude,
+      this.duplicateRadiusMeters
+    );
 
     if (existingCheckpoint) {
       throw new ConflictError(
-        `Checkpoint already exists at coordinates (${latitude}, ${longitude})`
+        `Checkpoint already exists within ${this.duplicateRadiusMeters}m (checkpoint #${existingCheckpoint.id}, distance: ${Math.round(existingCheckpoint.distanceMeters)}m)`
       );
     }
 
@@ -127,14 +133,16 @@ export class CheckpointsService {
       const targetLongitude =
         body.longitude ?? this._toComparableValue(existingCheckpoint.longitude);
 
-      const conflictingCheckpoint = await this.repo.findByCoordinates(
+      const conflictingCheckpoint = await this.repo.findNearestByLocationWithinRadius(
         targetLatitude,
-        targetLongitude
+        targetLongitude,
+        this.duplicateRadiusMeters,
+        id
       );
 
-      if (conflictingCheckpoint && conflictingCheckpoint.id !== id) {
+      if (conflictingCheckpoint) {
         throw new ConflictError(
-          `Checkpoint already exists at coordinates (${targetLatitude}, ${targetLongitude})`
+          `Checkpoint already exists within ${this.duplicateRadiusMeters}m (checkpoint #${conflictingCheckpoint.id}, distance: ${Math.round(conflictingCheckpoint.distanceMeters)}m)`
         );
       }
     }

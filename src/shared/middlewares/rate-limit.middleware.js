@@ -2,7 +2,6 @@ import { rateLimit } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import redisClient from '#shared/utils/radis.js';
 import { env } from '#config/env.js';
-import { ConflictError } from '#shared/utils/errors.js';
 /**
  * @param {{ max: number, windowSec: number, message?: string }} options
  */
@@ -31,7 +30,7 @@ export const reportSubmitLimiter = createRateLimiter({
 });
 
 export const routeEstimateLimiter = createRateLimiter({
-  max:       parseInt(env.ROUTE_LIMIT_MAX_REQUESTS, 10),
+  max: parseInt(env.ROUTE_LIMIT_MAX_REQUESTS, 10),
   windowSec: parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 1000,
-  message:   `Too many route requests. You can only request ${env.ROUTE_LIMIT_MAX_REQUESTS} routes every ${parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+  message: `Too many route requests. You can only request ${env.ROUTE_LIMIT_MAX_REQUESTS} routes every ${parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });

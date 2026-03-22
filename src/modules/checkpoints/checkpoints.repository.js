@@ -1,4 +1,8 @@
 import { prisma, prismaTransaction } from '#database/db.js';
+import {
+  findNearestCandidateWithinRadiusMeters,
+  getBoundingBoxByRadiusMeters,
+} from '#shared/utils/geo.js';
 
 export class CheckpointsRepository {
   _baseSelect() {
@@ -164,16 +168,56 @@ export class CheckpointsRepository {
     };
   }
 
-  async findByCoordinates(latitude, longitude) {
-    return prisma.checkpoint.findFirst({
-      where: {
-        latitude,
-        longitude,
+  async findNearestByLocationWithinRadius(latitude, longitude, radiusMeters, excludeId) {
+    const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(
+      Number(latitude),
+      Number(longitude),
+      radiusMeters
+    );
+
+    const where = {
+      latitude: {
+        gte: minLat,
+        lte: maxLat,
       },
+      longitude: {
+        gte: minLng,
+        lte: maxLng,
+      },
+      ...(excludeId !== undefined &&
+        excludeId !== null && {
+          id: {
+            not: excludeId,
+          },
+        }),
+    };
+
+    const candidateCheckpoints = await prisma.checkpoint.findMany({
+      where,
       select: {
         id: true,
+        latitude: true,
+        longitude: true,
       },
     });
+
+    const nearest = findNearestCandidateWithinRadiusMeters({
+      originLat: Number(latitude),
+      originLng: Number(longitude),
+      candidates: candidateCheckpoints,
+      radiusMeters,
+      getLat: (candidate) => candidate.latitude,
+      getLng: (candidate) => candidate.longitude,
+    });
+
+    if (!nearest) {
+      return null;
+    }
+
+    return {
+      id: nearest.candidate.id,
+      distanceMeters: nearest.distanceMeters,
+    };
   }
 
   async createWithAudit({ data, audit }) {

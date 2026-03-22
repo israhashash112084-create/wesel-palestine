@@ -1,24 +1,17 @@
+/* eslint-disable camelcase */
 import Joi from 'joi';
 
 const coordinateSchema = Joi.object({
-  lat: Joi.number()
-    .min(31.2)
-    .max(32.6)
-    .required()
-    .messages({
-      'number.min': 'Location must be within the West Bank boundaries',
-      'number.max': 'Location must be within the West Bank boundaries',
-      'any.required': 'lat is required',
-    }),
-  lng: Joi.number()
-    .min(34.9)
-    .max(35.6)
-    .required()
-    .messages({
-      'number.min': 'Location must be within the West Bank boundaries',
-      'number.max': 'Location must be within the West Bank boundaries',
-      'any.required': 'lng is required',
-    }),
+  lat: Joi.number().min(31.2).max(32.6).required().messages({
+    'number.min': 'Location must be within the West Bank boundaries',
+    'number.max': 'Location must be within the West Bank boundaries',
+    'any.required': 'lat is required',
+  }),
+  lng: Joi.number().min(34.9).max(35.6).required().messages({
+    'number.min': 'Location must be within the West Bank boundaries',
+    'number.max': 'Location must be within the West Bank boundaries',
+    'any.required': 'lng is required',
+  }),
 });
 
 export const estimateRouteSchema = Joi.object({
@@ -30,15 +23,11 @@ export const estimateRouteSchema = Joi.object({
     'any.required': 'to location is required',
   }),
 
-  avoid_checkpoints: Joi.array()
-    .items(Joi.number().integer().positive())
-    .default([]),
+  avoid_checkpoints: Joi.array().items(Joi.number().integer().positive()).default([]),
 
-  avoid_areas: Joi.array()         
-    .items(Joi.string().trim().min(2))
-    .default([]),
+  avoid_areas: Joi.array().items(Joi.string().trim().min(2)).default([]),
 
-    include_geometry:  Joi.boolean().default(true), 
+  include_geometry: Joi.boolean().default(true),
 });
 
 export const routeHistorySchema = Joi.object({
