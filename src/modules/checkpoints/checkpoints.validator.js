@@ -31,3 +31,7 @@ export const listCheckpointsSchema = Joi.object({
   sortBy: Joi.string().valid('createdAt', 'name', 'status').default('createdAt'),
   sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
 });
+
+export const checkpointIdParamSchema = Joi.object({
+  id: Joi.number().integer().positive().required(),
+});

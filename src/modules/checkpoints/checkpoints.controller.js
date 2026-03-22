@@ -11,4 +11,13 @@ export class CheckpointsController {
       data: result,
     });
   };
+
+  getCheckpointById = async (req, res) => {
+    const checkpoint = await this.checkpointsService.getCheckpointById(parseInt(req.params.id, 10));
+
+    res.status(200).json({
+      success: true,
+      data: checkpoint,
+    });
+  };
 }

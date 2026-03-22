@@ -4,7 +4,7 @@ import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import { CheckpointsRepository } from './checkpoints.repository.js';
 import { CheckpointsService } from './checkpoints.service.js';
 import { CheckpointsController } from './checkpoints.controller.js';
-import { listCheckpointsSchema } from './checkpoints.validator.js';
+import { listCheckpointsSchema, checkpointIdParamSchema } from './checkpoints.validator.js';
 
 const router = Router();
 
@@ -17,6 +17,13 @@ router.get(
   authenticate,
   validateRequest(listCheckpointsSchema, 'query'),
   checkpointsController.getAllCheckpoints
+);
+
+router.get(
+  '/:id',
+  authenticate,
+  validateRequest(checkpointIdParamSchema, 'params'),
+  checkpointsController.getCheckpointById
 );
 
 export default router;

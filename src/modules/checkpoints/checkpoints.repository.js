@@ -1,4 +1,4 @@
-import { prismaTransaction } from '#database/db.js';
+import { prisma, prismaTransaction } from '#database/db.js';
 
 export class CheckpointsRepository {
   _baseSelect() {
@@ -100,5 +100,12 @@ export class CheckpointsRepository {
       checkpoints,
       total,
     };
+  }
+
+  async findById(id) {
+    return prisma.checkpoint.findUnique({
+      where: { id },
+      select: this._baseSelect(),
+    });
   }
 }

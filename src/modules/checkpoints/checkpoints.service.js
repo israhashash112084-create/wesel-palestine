@@ -1,4 +1,5 @@
 import { getPaginationParams } from '#shared/utils/pagination.js';
+import { NotFoundError } from '#shared/utils/errors.js';
 
 export class CheckpointsService {
   constructor(checkpointsRepository) {
@@ -28,5 +29,15 @@ export class CheckpointsService {
       checkpoints,
       pagination: buildPaginationMeta(total),
     };
+  }
+
+  async getCheckpointById(id) {
+    const checkpoint = await this.repo.findById(id);
+
+    if (!checkpoint) {
+      throw new NotFoundError(`Checkpoint with id ${id}`);
+    }
+
+    return checkpoint;
   }
 }
