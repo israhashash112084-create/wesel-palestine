@@ -1,4 +1,5 @@
 import { prisma, prismaTransaction } from '#database/db.js';
+import { getBoundingBoxByRadiusMeters } from '#shared/utils/geo.js';
 
 export class IncidentsRepository {
   _baseSelect() {
@@ -126,6 +127,33 @@ export class IncidentsRepository {
     const cleanedIncidents = incidents.map((incident) => this._normalizeRecord(incident));
 
     return { incidents: cleanedIncidents, total };
+  }
+
+  async findNearbyCandidates({ lat, lng, radiusMeters, type, severity, trafficStatus, status }) {
+    const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(lat, lng, radiusMeters);
+
+    const where = {
+      locationLat: {
+        gte: minLat,
+        lte: maxLat,
+      },
+      locationLng: {
+        gte: minLng,
+        lte: maxLng,
+      },
+    };
+
+    if (type) where.type = type;
+    if (severity) where.severity = severity;
+    if (trafficStatus) where.trafficStatus = trafficStatus;
+    if (status) where.status = status;
+
+    const incidents = await prisma.incident.findMany({
+      where,
+      select: this._baseSelect(),
+    });
+
+    return incidents.map((incident) => this._normalizeRecord(incident));
   }
 
   async findById(id) {

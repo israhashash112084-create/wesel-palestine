@@ -10,6 +10,7 @@ import {
   incidentIdParamSchema,
   listIncidentsSchema,
   incidentHistoryQuerySchema,
+  nearbyIncidentsSchema,
 } from './incidents.validator.js';
 
 const router = Router();
@@ -24,6 +25,14 @@ router.get(
   authorize('moderator', 'admin'),
   validateRequest(listIncidentsSchema, 'query'),
   incidentsController.getAllIncidents
+);
+
+router.get(
+  '/nearby',
+  authenticate,
+  authorize('moderator', 'admin'),
+  validateRequest(nearbyIncidentsSchema, 'query'),
+  incidentsController.getNearbyIncidents
 );
 
 router.get(

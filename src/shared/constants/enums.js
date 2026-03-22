@@ -48,9 +48,12 @@ export const VOTE_VALUES = {
 };
 
 export const API_SERVICES = {
-  OSRM:           'osrm',
+  OSRM: 'osrm',
   OPENWEATHERMAP: 'openweathermap',
 };
 
-
-
+export const CHECKPOINT_STATUSES = {
+  OPEN: 'open',
+  SLOW: 'slow',
+  CLOSED: 'closed',
+};

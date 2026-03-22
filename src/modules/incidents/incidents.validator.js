@@ -2,10 +2,12 @@ import Joi from 'joi';
 import { INCIDENT_TYPES } from '#shared/constants/enums.js';
 import { INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
 import { TRAFFIC_STATUSES } from '#shared/constants/enums.js';
+import { INCIDENT_STATUSES } from '#shared/constants/enums.js';
 
 const incidentTypes = Object.values(INCIDENT_TYPES);
 const incidentSeverities = Object.values(INCIDENT_SEVERITIES);
 const trafficStatuses = Object.values(TRAFFIC_STATUSES);
+const incidentStatuses = Object.values(INCIDENT_STATUSES);
 
 export const createIncidentSchema = Joi.object({
   checkpointId: Joi.number().integer().positive().optional(),
@@ -89,4 +91,34 @@ export const incidentHistoryQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(10),
   sortBy: Joi.string().valid('changedAt').default('changedAt'),
   sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
+});
+
+export const nearbyIncidentsSchema = Joi.object({
+  lat: Joi.number().min(31.2).max(32.6).required().messages({
+    'number.min': 'Latitude must be within the West Bank boundaries [31.2, 32.6]',
+    'number.max': 'Latitude must be within the West Bank boundaries [31.2, 32.6]',
+    'any.required': 'Latitude is required',
+  }),
+  lng: Joi.number().min(34.9).max(35.6).required().messages({
+    'number.min': 'Longitude must be within the West Bank boundaries [34.9, 35.6]',
+    'number.max': 'Longitude must be within the West Bank boundaries [34.9, 35.6]',
+    'any.required': 'Longitude is required',
+  }),
+  radiusMeters: Joi.number().integer().min(1).max(50000).default(500),
+  type: Joi.string()
+    .valid(...incidentTypes)
+    .optional(),
+  severity: Joi.string()
+    .valid(...incidentSeverities)
+    .optional(),
+  trafficStatus: Joi.string()
+    .valid(...trafficStatuses)
+    .optional(),
+  status: Joi.string()
+    .valid(...incidentStatuses)
+    .optional(),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(50).default(10),
+  sortBy: Joi.string().valid('distance', 'createdAt', 'severity').default('distance'),
+  sortOrder: Joi.string().valid('asc', 'desc').default('asc'),
 });
