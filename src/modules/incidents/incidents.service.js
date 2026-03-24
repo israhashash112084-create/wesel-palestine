@@ -4,8 +4,9 @@ import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js'
 import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
 
 export class IncidentsService {
-  constructor(incidentsRepository) {
+  constructor(incidentsRepository, alertsService) {
     this.repo = incidentsRepository;
+    this.alertsService = alertsService;
   }
 
   _toComparableValue(value) {
@@ -97,7 +98,7 @@ export class IncidentsService {
     });
 
     return {
-      incidents: incidents,
+      incidents,
       pagination: buildPaginationMeta(total),
     };
   }
@@ -186,9 +187,11 @@ export class IncidentsService {
 
   async getIncidentById(id) {
     const incident = await this.repo.findById(id);
+
     if (!incident) {
       throw new NotFoundError('Incident not found');
     }
+
     return incident;
   }
 
@@ -197,19 +200,24 @@ export class IncidentsService {
 
     const moderatedAt = new Date();
 
-    return this.repo.create(
+    const incident = await this.repo.create(
       this._buildIncidentCreatePayload(adminInfo, body, {
         status: INCIDENT_STATUSES.VERIFIED, // Automatically mark as verified when created by a moderator/admin
         moderatedAt,
         moderatedBy: adminInfo.id,
       })
     );
+
+    if (this.alertsService) {
+      await this.alertsService.handleNewIncident(incident);
+    }
+
+    return incident;
   }
 
   async createIncident(userInfo, body) {
-    // TODO: Implement a more robust duplicate detection mechanism that considers both location and time proximity, as well as incident type and severity.
-
-    return this.repo.create(
+    // TODO: Implement a more robust duplicate detection mechanism
+    return await this.repo.create(
       this._buildIncidentCreatePayload(userInfo, body, {
         status: INCIDENT_STATUSES.PENDING,
       })
@@ -218,6 +226,7 @@ export class IncidentsService {
 
   async updateIncident(id, body, userInfo) {
     const existingIncident = await this.repo.findById(id);
+
     if (!existingIncident) {
       throw new NotFoundError('Incident not found');
     }
@@ -228,25 +237,24 @@ export class IncidentsService {
       throw new BadRequestError('No changes detected in update payload');
     }
 
-    const updatedIncident = await this.repo.updateWithStatusHistory(id, {
+    return this.repo.updateWithStatusHistory(id, {
       severity: body.severity,
       description: body.description,
       trafficStatus: body.trafficStatus,
       locationLat: body.locationLat,
       locationLng: body.locationLng,
       type: body.type,
-      oldStatus: existingIncident.trafficStatus,
+      oldStatus: existingIncident.status,
       changedBy: userInfo.id,
       notes: body.notes,
       oldValues,
       newValues,
     });
-
-    return updatedIncident;
   }
 
   async closeIncident(id, userInfo) {
     const existingIncident = await this.repo.findById(id);
+
     if (!existingIncident) {
       throw new NotFoundError('Incident not found');
     }
@@ -255,27 +263,25 @@ export class IncidentsService {
       throw new BadRequestError('Incident is already closed');
     }
 
-    const updatedIncident = await this.repo.updateWithStatusHistory(id, {
+    return this.repo.updateWithStatusHistory(id, {
       status: INCIDENT_STATUSES.CLOSED,
       trafficStatus: TRAFFIC_STATUSES.CLOSED,
       resolvedAt: new Date(),
-      oldStatus: existingIncident.trafficStatus,
+      oldStatus: existingIncident.status,
       changedBy: userInfo.id,
       notes: 'Closed incident',
       oldValues: { status: existingIncident.status },
       newValues: { status: INCIDENT_STATUSES.CLOSED },
     });
-
-    return updatedIncident;
   }
 
   async getIncidentReports(incidentId) {
     const incident = await this.repo.findById(incidentId);
+
     if (!incident) {
       throw new NotFoundError('Incident not found');
     }
 
-    // mock data for now, will implement actual reports logic in the future
     return [
       {
         id: 'report1',
@@ -285,7 +291,13 @@ export class IncidentsService {
     ];
   }
   async verifyIncident(id, userInfo, notes = 'Verified incident') {
-    return this._moderateIncident(id, INCIDENT_STATUSES.VERIFIED, userInfo, notes);
+    const incident = await this._moderateIncident(id, INCIDENT_STATUSES.VERIFIED, userInfo, notes);
+
+    if (this.alertsService) {
+      await this.alertsService.handleNewIncident(incident);
+    }
+
+    return incident;
   }
 
   async rejectIncident(id, userInfo, notes = 'Reject incident') {
@@ -310,7 +322,7 @@ export class IncidentsService {
       moderatedAt: now,
       moderatedBy: actorId,
       trafficStatus: existingIncident.trafficStatus,
-      oldStatus: existingIncident.trafficStatus,
+      oldStatus: existingIncident.status,
       changedBy: actorId,
       notes,
       oldValues: {

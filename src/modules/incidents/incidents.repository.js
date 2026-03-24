@@ -238,7 +238,7 @@ export class IncidentsRepository {
           incidentId: id,
           changedBy: data.changedBy,
           oldStatus: data.oldStatus,
-          newStatus: data.trafficStatus ?? data.oldStatus,
+          newStatus: data.status ?? data.oldStatus,
           notes: data.notes,
           oldValues: data.oldValues,
           newValues: data.newValues,
