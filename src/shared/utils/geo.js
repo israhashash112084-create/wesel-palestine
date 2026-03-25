@@ -54,3 +54,22 @@ export const routePassesNearPoint = (
 
   return false;
 };
+
+export const routePassesThroughArea = (geometry, areaBox) => {
+  if (!geometry || geometry.type !== 'LineString' || !geometry.coordinates?.length) {
+    return false;
+  }
+
+  for (const [lng, lat] of geometry.coordinates) {
+    if (
+      lat >= areaBox.minLat &&
+      lat <= areaBox.maxLat &&
+      lng >= areaBox.minLng &&
+      lng <= areaBox.maxLng
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
