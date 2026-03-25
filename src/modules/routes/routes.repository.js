@@ -1,5 +1,5 @@
 import { prisma } from '#database/db.js';
-import { CHECKPOINT_STATUSES, INCIDENT_STATUSES } from '#shared/constants/enums.js';
+import { TRAFFIC_STATUSES, INCIDENT_STATUSES } from '#shared/constants/enums.js';
 
 export class RoutesRepository {
 
@@ -42,10 +42,10 @@ export class RoutesRepository {
 
 
   async findActiveCheckpoints() {
-    return await prisma.checkpoints.findMany({
+    return await prisma.checkpoint.findMany({
       where: {
         status: {
-          in: [CHECKPOINT_STATUSES.CLOSED, CHECKPOINT_STATUSES.SLOW],
+          in: [TRAFFIC_STATUSES.CLOSED, TRAFFIC_STATUSES.SLOW],
         },
       },
       select: {
@@ -54,17 +54,17 @@ export class RoutesRepository {
         latitude:  true,
         longitude: true,
         status:    true,
-        areaName:  true,
+        city:  true,
       },
     });
   }
 
 
   async findActiveIncidents() {
-    return await prisma.incidents.findMany({
+    return await prisma.incident.findMany({
       where: {
         status:     INCIDENT_STATUSES.VERIFIED,
-        isVerified: true,
+       // isVerified: true,
       },
       select: {
         id:           true,
