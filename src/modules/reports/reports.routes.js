@@ -14,13 +14,13 @@ import {
 } from '#shared/middlewares/rate-limit.middleware.js';
 import {
   ReportSchema,
+  updateReportSchema,
   listReportsSchema,
   voteReportSchema,
   reportIdSchema,
   moderateReportSchema,
 } from './reports.validator.js';
 import { UserRoles } from '#shared/constants/roles.js';
-import { validateAreaLocation } from '#shared/middlewares/validate-area.middleware.js';
 const reportsRepository = new ReportsRepository();
 const reportsService = new ReportsService(reportsRepository);
 const reportsController = new ReportsController(reportsService);
@@ -31,7 +31,6 @@ router.post(
   authenticate,
   reportSubmitLimiter,
   validateRequest(ReportSchema, 'body'),
-  validateAreaLocation,
   areaReportLimiter,
   reportsController.submitReport
 );
@@ -54,11 +53,11 @@ router.post(
   validateRequest(voteReportSchema, 'body'),
   reportsController.voteOnReport
 );
-router.put(
+router.patch(
   '/:id',
   authenticate,
   validateRequest(reportIdSchema, 'params'),
-  validateRequest(ReportSchema, 'body'),
+  validateRequest(updateReportSchema, 'body'),
   reportsController.updateReport
 );
 router.patch(

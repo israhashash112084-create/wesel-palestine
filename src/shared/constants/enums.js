@@ -14,6 +14,7 @@ export const INCIDENT_TYPES = {
   ROAD_DAMAGE: 'road_damage',
   PROTEST: 'protest',
   CONSTRUCTION: 'construction',
+  CHECKPOINT_STATUS_UPDATE: 'checkpoint_status_update',
   OTHER: 'other',
 };
 
@@ -48,9 +49,12 @@ export const VOTE_VALUES = {
 };
 
 export const API_SERVICES = {
-  OSRM:           'osrm',
+  OSRM: 'osrm',
   OPENWEATHERMAP: 'openweathermap',
 };
 
-
-
+export const CHECKPOINT_STATUSES = {
+  OPEN: 'open',
+  SLOW: 'slow',
+  CLOSED: 'closed',
+};

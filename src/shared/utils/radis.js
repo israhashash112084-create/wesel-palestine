@@ -1,6 +1,6 @@
 import { createClient } from 'redis';
-import { env }          from '#config/env.js';
-import { logger }       from '#shared/utils/logger.js';
+import { env } from '#config/env.js';
+import { logger } from '#shared/utils/logger.js';
 
 const redisClient = createClient({
   socket: {
@@ -10,8 +10,8 @@ const redisClient = createClient({
   ...(env.REDIS_PASSWORD && { password: env.REDIS_PASSWORD }),
 });
 
-redisClient.on('error',   (err) => logger.error('Redis Client Error:', err));
-redisClient.on('connect', ()    => logger.info('Redis connected successfully'));
+redisClient.on('error', (err) => logger.error('Redis Client Error:', err));
+redisClient.on('connect', () => logger.info('Redis connected successfully'));
 
 await redisClient.connect();
 

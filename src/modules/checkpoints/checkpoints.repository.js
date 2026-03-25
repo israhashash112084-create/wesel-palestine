@@ -9,7 +9,7 @@ export class CheckpointsRepository {
     return {
       id: true,
       name: true,
-      areaName: true,
+      area: true,
       description: true,
       latitude: true,
       longitude: true,
@@ -35,7 +35,7 @@ export class CheckpointsRepository {
           },
         },
         {
-          areaName: {
+          area: {
             contains: search,
             mode: 'insensitive',
           },
@@ -73,7 +73,7 @@ export class CheckpointsRepository {
   _checkpointMutationData(data) {
     return {
       ...(data.name !== undefined && { name: data.name }),
-      ...(data.areaName !== undefined && { areaName: data.areaName }),
+      ...(data.area !== undefined && { area: data.area }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.latitude !== undefined && { latitude: data.latitude }),
       ...(data.longitude !== undefined && { longitude: data.longitude }),

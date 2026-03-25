@@ -1,6 +1,7 @@
 import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
+import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
 
 export class IncidentsService {
   constructor(incidentsRepository) {
@@ -26,6 +27,9 @@ export class IncidentsService {
       'trafficStatus',
       'locationLat',
       'locationLng',
+      'area',
+      'road',
+      'city',
       'type',
     ];
 
@@ -56,6 +60,8 @@ export class IncidentsService {
       locationLat: body.locationLat,
       locationLng: body.locationLng,
       area: body.area,
+      road: body.road,
+      city: body.city,
       type: body.type,
       severity: body.severity,
       description: body.description,
@@ -98,6 +104,88 @@ export class IncidentsService {
     return {
       incidents: incidents,
       pagination: buildPaginationMeta(total),
+    };
+  }
+
+  _severityRank(severity) {
+    const rank = {
+      low: 1,
+      medium: 2,
+      high: 3,
+      critical: 4,
+    };
+
+    return rank[severity] ?? 0;
+  }
+
+  _sortNearbyIncidents(incidents, { sortBy, sortOrder }) {
+    const direction = sortOrder === 'desc' ? -1 : 1;
+
+    return incidents.sort((a, b) => {
+      if (sortBy === 'createdAt') {
+        return direction * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      }
+
+      if (sortBy === 'severity') {
+        return direction * (this._severityRank(a.severity) - this._severityRank(b.severity));
+      }
+
+      return direction * (a.distanceMeters - b.distanceMeters);
+    });
+  }
+
+  async getNearbyIncidents(filters) {
+    const {
+      lat,
+      lng,
+      radiusMeters = 500,
+      type,
+      severity,
+      trafficStatus,
+      status,
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+    } = filters;
+
+    const centerLat = Number(lat);
+    const centerLng = Number(lng);
+    const searchRadiusMeters = Number(radiusMeters);
+
+    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+
+    const candidates = await this.repo.findNearbyCandidates({
+      lat: centerLat,
+      lng: centerLng,
+      radiusMeters: searchRadiusMeters,
+      type,
+      severity,
+      trafficStatus,
+      status,
+    });
+
+    const strictNearby = candidates
+      .map((incident) => {
+        const incidentLat = Number(incident.locationLat);
+        const incidentLng = Number(incident.locationLng);
+        const distanceMeters = kilometersToMeters(
+          distanceBetween(centerLat, centerLng, incidentLat, incidentLng)
+        );
+
+        return {
+          ...incident,
+          distanceMeters: Math.round(distanceMeters),
+        };
+      })
+      .filter((incident) => incident.distanceMeters <= searchRadiusMeters);
+
+    const sortedIncidents = this._sortNearbyIncidents(strictNearby, { sortBy, sortOrder });
+    const paginatedIncidents = sortedIncidents.slice(skip, skip + take);
+
+    return {
+      incidents: paginatedIncidents,
+      pagination: buildPaginationMeta(sortedIncidents.length),
     };
   }
 
@@ -151,8 +239,12 @@ export class IncidentsService {
       trafficStatus: body.trafficStatus,
       locationLat: body.locationLat,
       locationLng: body.locationLng,
+      area: body.area,
+      road: body.road,
+      city: body.city,
       type: body.type,
-      oldStatus: existingIncident.trafficStatus,
+      oldStatus: existingIncident.status,
+      newStatus: existingIncident.status,
       changedBy: userInfo.id,
       notes: body.notes,
       oldValues,
@@ -176,7 +268,8 @@ export class IncidentsService {
       status: INCIDENT_STATUSES.CLOSED,
       trafficStatus: TRAFFIC_STATUSES.CLOSED,
       resolvedAt: new Date(),
-      oldStatus: existingIncident.trafficStatus,
+      oldStatus: existingIncident.status,
+      newStatus: INCIDENT_STATUSES.CLOSED,
       changedBy: userInfo.id,
       notes: 'Closed incident',
       oldValues: { status: existingIncident.status },
@@ -227,7 +320,8 @@ export class IncidentsService {
       moderatedAt: now,
       moderatedBy: actorId,
       trafficStatus: existingIncident.trafficStatus,
-      oldStatus: existingIncident.trafficStatus,
+      oldStatus: existingIncident.status,
+      newStatus,
       changedBy: actorId,
       notes,
       oldValues: {

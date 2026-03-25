@@ -20,6 +20,8 @@ export const createIncidentSchema = Joi.object({
     'any.required': 'Location longitude is required',
   }),
   area: Joi.string().max(100).optional(),
+  road: Joi.string().max(255).optional(),
+  city: Joi.string().max(255).optional(),
   type: Joi.string()
     .max(100)
     .required()

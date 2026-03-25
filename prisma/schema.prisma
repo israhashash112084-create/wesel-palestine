@@ -15,7 +15,6 @@ datasource db {
 }
 
 model User {
-
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
   email        String @unique
@@ -56,7 +55,9 @@ model Checkpoint {
 
   id            Int                       @id @default(autoincrement())
   name          String                    @db.VarChar(100)
-  areaName      String?                   @map("area_name") @db.VarChar(100)
+  area          String?                   @db.VarChar(100)
+  road          String?                   @db.VarChar(255)
+  city          String?                   @db.VarChar(255)
   description   String?                   @db.Text
   latitude      Decimal                   @db.Decimal(10, 6)
   longitude     Decimal                   @db.Decimal(10, 6)
@@ -64,11 +65,15 @@ model Checkpoint {
   createdBy     String?                   @map("created_by") @db.Uuid
   user          User?                     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   incidents     Incident[]
+  reports       Report[]
   auditLogs     CheckpointAuditLog[]
   statusHistory CheckpointStatusHistory[]
   createdAt     DateTime                  @default(now()) @map("created_at")
   updatedAt     DateTime                  @updatedAt @map("updated_at")
 
+  @@index([latitude, longitude], map: "idx_checkpoints_location")
+  @@index([city], map: "idx_checkpoints_city")
+  @@index([area], map: "idx_checkpoints_area")
   @@map("checkpoints")
 }
 
@@ -146,7 +151,11 @@ model Report {
   locationLat     Decimal          @map("location_lat") @db.Decimal(10, 8)
   locationLng     Decimal          @map("location_lng") @db.Decimal(11, 8)
   area            String?          @db.VarChar(255)
+  road            String?          @db.VarChar(255)
+  city            String?          @db.VarChar(255)
   type            IncidentType
+  checkpointId    Int?             @map("checkpoint_id")
+  proposedCheckpointStatus TrafficStatus? @map("proposed_checkpoint_status")
   severity        IncidentSeverity @default(low)
   description     String           @db.Text
   confidenceScore Float            @default(0) @map("confidence_score")
@@ -161,8 +170,9 @@ model Report {
   original   Report?  @relation("ReportDuplicates", fields: [duplicateOf], references: [id], onDelete: SetNull)
   duplicates Report[] @relation("ReportDuplicates")
 
-  user     User?     @relation("UserReports", fields: [userId], references: [id], onDelete: SetNull)
-  incident Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  user       User?       @relation("UserReports", fields: [userId], references: [id], onDelete: SetNull)
+  incident   Incident?   @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  checkpoint Checkpoint? @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
 
   votes     ReportVote[]
   auditLogs ModerationAuditLog[]
@@ -172,7 +182,12 @@ model Report {
   @@index([status], map: "idx_reports_status")
   @@index([type], map: "idx_reports_type")
   @@index([duplicateOf], map: "idx_reports_duplicate_of")
+  @@index([checkpointId], map: "idx_reports_checkpoint_id")
+  @@index([type, checkpointId, proposedCheckpointStatus, status, createdAt], map: "idx_reports_checkpoint_status_dedup")
   @@index([locationLat, locationLng], map: "idx_reports_location")
+  @@index([city], map: "idx_reports_city")
+  @@index([area], map: "idx_reports_area")
+  @@index([road], map: "idx_reports_road")
   @@index([createdAt], map: "idx_reports_created_at")
   @@map("reports")
 }
@@ -194,7 +209,9 @@ model Incident {
   locationLat Decimal @map("location_lat") @db.Decimal(10, 8)
   locationLng Decimal @map("location_lng") @db.Decimal(11, 8)
 
-  area String? @db.VarChar(255)
+  area   String? @db.VarChar(255)
+  road   String? @db.VarChar(255)
+  city   String? @db.VarChar(255)
 
   type        IncidentType
   severity    IncidentSeverity
@@ -222,6 +239,9 @@ model Incident {
   @@index([severity], map: "idx_incidents_severity")
   @@index([reportedBy], map: "idx_incidents_reported_by")
   @@index([moderatedBy], map: "idx_incidents_moderated_by")
+  @@index([city], map: "idx_incidents_city")
+  @@index([area], map: "idx_incidents_area")
+  @@index([road], map: "idx_incidents_road")
   @@index([createdAt(sort: Desc)], map: "idx_incidents_created_at")
   @@map("incidents")
 }
@@ -255,6 +275,7 @@ enum IncidentType {
   road_damage
   protest
   construction
+  checkpoint_status_update
   other
 }
 

@@ -1,4 +1,5 @@
 import { prisma, prismaTransaction } from '#database/db.js';
+import { getBoundingBoxByRadiusMeters } from '#shared/utils/geo.js';
 
 export class IncidentsRepository {
   _baseSelect() {
@@ -10,6 +11,8 @@ export class IncidentsRepository {
       locationLat: true,
       locationLng: true,
       area: true,
+      road: true,
+      city: true,
       type: true,
       status: true,
       severity: true,
@@ -23,7 +26,7 @@ export class IncidentsRepository {
         select: {
           id: true,
           name: true,
-          areaName: true,
+          area: true,
         },
       },
       reporter: {
@@ -43,12 +46,48 @@ export class IncidentsRepository {
     };
   }
 
-  _removeNullValues(record) {
-    return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== null));
-  }
+  _buildWhere({
+    type,
+    severity,
+    trafficStatus,
+    checkpointId,
+    reportedBy,
+    status,
+    fromDate,
+    toDate,
+    minLat,
+    maxLat,
+    minLng,
+    maxLng,
+  }) {
+    const where = {};
 
-  _normalizeRecord(record) {
-    return this._removeNullValues(record);
+    if (type) where.type = type;
+    if (severity) where.severity = severity;
+    if (trafficStatus) where.trafficStatus = trafficStatus;
+    if (checkpointId) where.checkpointId = checkpointId;
+    if (reportedBy) where.reportedBy = reportedBy;
+    if (status) where.status = status;
+
+    if (fromDate || toDate) {
+      where.createdAt = {};
+      if (fromDate) where.createdAt.gte = new Date(fromDate);
+      if (toDate) where.createdAt.lte = new Date(toDate);
+    }
+
+    if (minLat !== undefined || maxLat !== undefined) {
+      where.locationLat = {};
+      if (minLat !== undefined) where.locationLat.gte = minLat;
+      if (maxLat !== undefined) where.locationLat.lte = maxLat;
+    }
+
+    if (minLng !== undefined || maxLng !== undefined) {
+      where.locationLng = {};
+      if (minLng !== undefined) where.locationLng.gte = minLng;
+      if (maxLng !== undefined) where.locationLng.lte = maxLng;
+    }
+
+    return where;
   }
 
   async create(data) {
@@ -70,6 +109,8 @@ export class IncidentsRepository {
         locationLat: data.locationLat,
         locationLng: data.locationLng,
         area: data.area,
+        road: data.road ?? null,
+        city: data.city ?? null,
         type: data.type,
         severity: data.severity,
         description: data.description,
@@ -80,7 +121,7 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return this._normalizeRecord(incident);
+    return incident;
   }
 
   async findMany({
@@ -96,18 +137,15 @@ export class IncidentsRepository {
     sortBy,
     sortOrder,
   }) {
-    const where = {};
-
-    if (type) where.type = type;
-    if (severity) where.severity = severity;
-    if (trafficStatus) where.trafficStatus = trafficStatus;
-    if (checkpointId) where.checkpointId = checkpointId;
-    if (reportedBy) where.reportedBy = reportedBy;
-    if (fromDate || toDate) {
-      where.createdAt = {};
-      if (fromDate) where.createdAt.gte = new Date(fromDate);
-      if (toDate) where.createdAt.lte = new Date(toDate);
-    }
+    const where = this._buildWhere({
+      type,
+      severity,
+      trafficStatus,
+      checkpointId,
+      reportedBy,
+      fromDate,
+      toDate,
+    });
 
     const { incidents, total } = await prismaTransaction(async (tx) => {
       const incidents = await tx.incident.findMany({
@@ -123,9 +161,29 @@ export class IncidentsRepository {
       return { incidents, total };
     });
 
-    const cleanedIncidents = incidents.map((incident) => this._normalizeRecord(incident));
+    return { incidents, total };
+  }
 
-    return { incidents: cleanedIncidents, total };
+  async findNearbyCandidates({ lat, lng, radiusMeters, type, severity, trafficStatus, status }) {
+    const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(lat, lng, radiusMeters);
+
+    const where = this._buildWhere({
+      type,
+      severity,
+      trafficStatus,
+      status,
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+    });
+
+    const incidents = await prisma.incident.findMany({
+      where,
+      select: this._baseSelect(),
+    });
+
+    return incidents;
   }
 
   async findById(id) {
@@ -134,7 +192,7 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return incident ? this._normalizeRecord(incident) : null;
+    return incident;
   }
 
   async update(id, data) {
@@ -151,12 +209,22 @@ export class IncidentsRepository {
       select: this._baseSelect(),
     });
 
-    return this._normalizeRecord(updatedIncident);
+    return updatedIncident;
   }
 
   async updateWithStatusHistory(id, data) {
-    const updatedIncident = await prismaTransaction(async (tx) => {
-      const incident = await tx.incident.update({
+    const existingIncident = await prisma.incident.findUnique({
+      where: { id },
+      select: {
+        status: true,
+      },
+    });
+
+    const oldStatus = data.oldStatus ?? existingIncident?.status;
+    const newStatus = data.newStatus ?? data.status ?? existingIncident?.status;
+
+    const [updatedIncident] = await prisma.$transaction([
+      prisma.incident.update({
         where: { id },
         data: {
           severity: data.severity,
@@ -177,44 +245,21 @@ export class IncidentsRepository {
           resolvedAt: data.resolvedAt,
         },
         select: this._baseSelect(),
-      });
-
-      await tx.incidentStatusHistory.create({
+      }),
+      prisma.incidentStatusHistory.create({
         data: {
           incidentId: id,
           changedBy: data.changedBy,
-          oldStatus: data.oldStatus,
-          newStatus: data.trafficStatus ?? data.oldStatus,
+          oldStatus,
+          newStatus,
           notes: data.notes,
           oldValues: data.oldValues,
           newValues: data.newValues,
         },
-      });
+      }),
+    ]);
 
-      return incident;
-    });
-    return this._normalizeRecord(updatedIncident);
-  }
-
-  _normalizeHistoryRecord(record) {
-    return {
-      id: record.id,
-      actor: {
-        id: record.user.id,
-        firstName: record.user.firstName,
-        lastName: record.user.lastName,
-      },
-      before: {
-        status: record.oldStatus,
-        values: record.oldValues ?? {},
-      },
-      after: {
-        status: record.newStatus,
-        values: record.newValues ?? {},
-      },
-      notes: record.notes ?? null,
-      timestamp: record.changedAt,
-    };
+    return updatedIncident;
   }
 
   async findStatusHistory(incidentId, { skip, take, sortBy, sortOrder }) {
@@ -250,7 +295,7 @@ export class IncidentsRepository {
     });
 
     return {
-      history: records.map((record) => this._normalizeHistoryRecord(record)),
+      history: records,
       total,
     };
   }
