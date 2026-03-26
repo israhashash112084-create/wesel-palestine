@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getOsrmRoutes , getOsrmRouteViaWaypoint} from '#integrations/routing/osrm.client.js';
+import { getOsrmRoutes, getOsrmRouteViaWaypoint} from '#integrations/routing/osrm.client.js';
 import { getWeather } from '#integrations/weather/weather.client.js';
 import { API_SERVICES, TRAFFIC_STATUSES, INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
 import { BadRequestError } from '#shared/utils/errors.js';
@@ -9,23 +9,23 @@ import { generateDetourWaypoints } from '#shared/utils/detour.js';
 import { logger } from '#shared/utils/logger.js';
 import { AREA_BOUNDARIES } from '#shared/constants/area-boundaries.js';
 
-const CACHE_TTL_CLEAR_MS    = 60 * 60 * 1000;
+const CACHE_TTL_CLEAR_MS = 60 * 60 * 1000;
 const CACHE_TTL_INCIDENT_MS = 10 * 60 * 1000;
 
 const DELAY_CHECKPOINT = {
   [TRAFFIC_STATUSES.CLOSED]: 20,
-  [TRAFFIC_STATUSES.SLOW]:   10,
+  [TRAFFIC_STATUSES.SLOW]: 10,
 };
 
 const DELAY_INCIDENT = {
   [INCIDENT_SEVERITIES.CRITICAL]: 30,
-  [INCIDENT_SEVERITIES.HIGH]:     20,
-  [INCIDENT_SEVERITIES.MEDIUM]:   10,
-  [INCIDENT_SEVERITIES.LOW]:       5,
+  [INCIDENT_SEVERITIES.HIGH]: 20,
+  [INCIDENT_SEVERITIES.MEDIUM]: 10,
+  [INCIDENT_SEVERITIES.LOW]: 5,
 };
 
-const DELAY_WEATHER       = 10;
-const AVERAGE_SPEED_KMH   = 60;
+const DELAY_WEATHER = 10;
+const AVERAGE_SPEED_KMH = 60;
 
 const _normalizeArea = (value) => (value ?? '').trim().toLowerCase();
 
@@ -436,14 +436,14 @@ if (!selectedRoute && areaBoxes.length > 0) {
   return passes;
    });
 
-    const incidentsOnRoute = allIncidents.filter((inc) => {
-   if (!selectedGeometry) return false;
+  const incidentsOnRoute = allIncidents.filter((inc) => {
+     if (!selectedGeometry) return false;
 
-   return routePassesNearPoint(
-    selectedGeometry,
-    Number(inc.locationLat),
-    Number(inc.locationLng),
-    2
+     return routePassesNearPoint(
+      selectedGeometry,
+      Number(inc.locationLat),
+      Number(inc.locationLng),
+      2
    );
    });
 
@@ -566,8 +566,7 @@ for (const cp of checkpointsOnRoute) {
       warnings.push(`Hazardous weather: ${weather.description}`);
     }
 
-    const hasIncidents = incidentsOnRoute.length > 0 ||
-      checkpointsOnRoute.some((cp) => cp.status === TRAFFIC_STATUSES.CLOSED);
+    const hasIncidents = incidentsOnRoute.length > 0 || checkpointsOnRoute.some((cp) => cp.status === TRAFFIC_STATUSES.CLOSED);
 
     const ttl       = hasIncidents ? CACHE_TTL_INCIDENT_MS : CACHE_TTL_CLEAR_MS;
     const expiresAt = new Date(Date.now() + ttl);
@@ -622,24 +621,25 @@ for (const cp of checkpointsOnRoute) {
 
   if(saveHistory){
     await this.routesRepository.saveRouteHistory({
-    userId,
+      userId,
 
-    fromLat: from.lat,
-    fromLng: from.lng,
-    toLat: to.lat,
-    toLng: to.lng,
+      fromLat: from.lat,
+      fromLng: from.lng,
+      toLat: to.lat,
+      toLng: to.lng,
 
-    distanceKm: responseData.summary.distanceKm,
-    baseDurationMinutes: responseData.summary.baseDurationMinutes,
-    finalDurationMinutes: responseData.summary.finalDurationMinutes,
-    totalDelayMinutes: responseData.summary.totalDelayMinutes,
+      distanceKm: responseData.summary.distanceKm,
+      baseDurationMinutes: responseData.summary.baseDurationMinutes,
+      finalDurationMinutes: responseData.summary.finalDurationMinutes,
+      totalDelayMinutes: responseData.summary.totalDelayMinutes,
 
-    isFallback: responseData.summary.isFallback,});
+      isFallback: responseData.summary.isFallback,
+    });
 
   }
   
    // return { ...responseData, fromCache: false };
-    return _formatRouteResponse(responseData, false);
+   return _formatRouteResponse(responseData, false);
   }
 
   async getRouteHistory(query, userId) {

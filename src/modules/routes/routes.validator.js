@@ -2,19 +2,12 @@ import Joi from 'joi';
 
 const coordinateSchema = Joi.object({
   lat: Joi.number()
-    .min(31.2)
-    .max(32.6)
-    .required()
-    .messages({
+    .min(31.2).max(32.6).required().messages({
       'number.min': 'Location must be within the West Bank boundaries',
       'number.max': 'Location must be within the West Bank boundaries',
       'any.required': 'lat is required',
     }),
-  lng: Joi.number()
-    .min(34.9)
-    .max(35.6)
-    .required()
-    .messages({
+  lng: Joi.number().min(34.9).max(35.6).required().messages({
       'number.min': 'Location must be within the West Bank boundaries',
       'number.max': 'Location must be within the West Bank boundaries',
       'any.required': 'lng is required',
