@@ -190,7 +190,8 @@ export class RoutesService {
     this.routesRepository = routesRepository;
   }
 
-  async estimateRoute({ from, to, avoid_checkpoints ,avoid_areas, include_geometry }, userId) {
+  async estimateRoute({ from, to, avoid_checkpoints ,avoid_areas, include_geometry }, userId, options={}) {
+    const {saveHistory = true }=options;
 
     if (from.lat === to.lat && from.lng === to.lng) {
       throw new BadRequestError('Origin and destination cannot be the same');
@@ -203,21 +204,23 @@ export class RoutesService {
       //return { ...cached.responseData, fromCache: true };
       const formattedResponse = _formatRouteResponse(cached.responseData, true);
 
-      await this.routesRepository.saveRouteHistory({
-       userId,
+      if(saveHistory){
+        await this.routesRepository.saveRouteHistory({
+          userId,
 
-       fromLat: from.lat,
-       fromLng: from.lng,
-       toLat: to.lat,
-       toLng: to.lng,
+          fromLat: from.lat,
+          fromLng: from.lng,
+          toLat: to.lat,
+          toLng: to.lng,
 
-       distanceKm: formattedResponse.summary.distanceKm,
-       baseDurationMinutes: formattedResponse.summary.baseDurationMinutes,
-       finalDurationMinutes: formattedResponse.summary.finalDurationMinutes,
-       totalDelayMinutes: formattedResponse.summary.totalDelayMinutes,
+          distanceKm: formattedResponse.summary.distanceKm,
+          baseDurationMinutes: formattedResponse.summary.baseDurationMinutes,
+          finalDurationMinutes: formattedResponse.summary.finalDurationMinutes,
+          totalDelayMinutes: formattedResponse.summary.totalDelayMinutes,
 
-       isFallback: formattedResponse.summary.isFallback,
-     });
+          isFallback: formattedResponse.summary.isFallback,
+       });
+    }
 
       return formattedResponse;
      //  return _formatRouteResponse(cached.responseData, true);
@@ -617,7 +620,8 @@ for (const cp of checkpointsOnRoute) {
       expiresAt,
     });
 
-  await this.routesRepository.saveRouteHistory({
+  if(saveHistory){
+    await this.routesRepository.saveRouteHistory({
     userId,
 
     fromLat: from.lat,
@@ -632,6 +636,8 @@ for (const cp of checkpointsOnRoute) {
 
     isFallback: responseData.summary.isFallback,});
 
+  }
+  
    // return { ...responseData, fromCache: false };
     return _formatRouteResponse(responseData, false);
   }
@@ -669,4 +675,67 @@ for (const cp of checkpointsOnRoute) {
     pagination: buildPaginationMeta(total),
     };
   }
+
+async compareRoutes({ from, to, scenarios }, userId) {
+  if (!scenarios || scenarios.length === 0) {
+    throw new BadRequestError('Scenarios are required');
+  }
+
+  const results = [];
+
+  for (const scenario of scenarios) {
+    const result = await this.estimateRoute(
+      {
+        from,
+        to,
+        avoid_checkpoints: scenario.avoid_checkpoints ?? [],
+        avoid_areas: scenario.avoid_areas ?? [],
+        include_geometry: false, 
+      },
+      userId,
+      {saveHistory:false}
+    );
+
+    results.push({
+      name: scenario.name ?? 'scenario',
+      avoid_checkpoints: scenario.avoid_checkpoints ?? [],
+      avoid_areas: scenario.avoid_areas ?? [],
+
+      distanceKm: result.summary.distanceKm,
+      baseDurationMinutes: result.summary.baseDurationMinutes,
+      totalDelayMinutes: result.summary.totalDelayMinutes,
+      finalDurationMinutes: result.summary.finalDurationMinutes,
+      isFallback: result.summary.isFallback,
+
+      warningCount: result.conditions?.warnings?.length ?? 0,
+      warnings: result.conditions?.warnings ?? [],
+
+      checkpointCount: result.impact?.counts?.checkpoints ?? 0,
+      incidentCount: result.impact?.counts?.incidents ?? 0,
+      totalFactors: result.impact?.counts?.totalFactors ?? 0,
+    });
+  }
+
+  const sortedResults = [...results].sort(
+    (a, b) => a.finalDurationMinutes - b.finalDurationMinutes
+  );
+
+  const best = sortedResults[0] ?? null;
+
+  return {
+    from,
+    to,
+    recommendedScenario: best
+      ? {
+          name: best.name,
+          finalDurationMinutes: best.finalDurationMinutes,
+          totalDelayMinutes: best.totalDelayMinutes,
+          warningCount: best.warningCount,
+        }
+      : null,
+
+    comparisons: sortedResults,
+  };
+}
+
 }

@@ -5,7 +5,7 @@ import { RoutesController }  from './routes.controller.js';
 import { authenticate }      from '#shared/middlewares/auth.middleware.js';
 import { validateRequest }   from '#shared/middlewares/validate.middleware.js';
 import { routeEstimateLimiter } from '#shared/middlewares/rate-limit.middleware.js';
-import { estimateRouteSchema, routeHistorySchema } from './routes.validator.js';
+import { estimateRouteSchema, routeHistorySchema, compareRouteSchema } from './routes.validator.js';
 
 // Dependency Injection
 const routesRepository = new RoutesRepository();
@@ -20,6 +20,14 @@ router.post(
   routeEstimateLimiter, 
   validateRequest(estimateRouteSchema),
   routesController.estimate
+);
+
+router.post(
+  '/estimate/compare',
+  authenticate,
+  routeEstimateLimiter,
+  validateRequest(compareRouteSchema),
+  routesController.compare
 );
 
 router.get(

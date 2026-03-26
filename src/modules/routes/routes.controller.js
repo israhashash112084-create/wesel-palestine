@@ -24,4 +24,14 @@ export class RoutesController {
     data: result,
   });
 };
+
+compare = async (req, res) => {
+  const result = await this.routesService.compareRoutes(req.body, req.userInfo.id);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
+
 }
