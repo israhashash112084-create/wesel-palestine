@@ -816,4 +816,34 @@ async getRouteHistoryStats(userId) {
       : null,
   };
 }
+
+async getActiveCheckpoints() {
+  const checkpoints = await this.routesRepository.findActiveCheckpoints();
+
+  return checkpoints.map((cp) => ({
+    id: cp.id,
+    name: cp.name,
+    status: cp.status,
+    location: {
+      lat: Number(cp.latitude),
+      lng: Number(cp.longitude),
+    },
+    city: cp.city ?? null,
+  }));
+}
+
+async getActiveIncidents() {
+  const incidents = await this.routesRepository.findActiveIncidents();
+
+  return incidents.map((inc) => ({
+    id: inc.id,
+    type: inc.type,
+    severity: inc.severity,
+    location: {
+      lat: Number(inc.locationLat),
+      lng: Number(inc.locationLng),
+    },
+    area: inc.area ?? null,
+  }));
+}
 }

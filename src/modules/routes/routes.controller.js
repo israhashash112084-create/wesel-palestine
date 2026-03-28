@@ -51,4 +51,23 @@ getHistoryStats = async (req, res) => {
     data: result,
   });
 };
+
+getActiveCheckpoints = async (req, res) => {
+  const result = await this.routesService.getActiveCheckpoints();
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
+
+getActiveIncidents = async (req, res) => {
+  const result = await this.routesService.getActiveIncidents();
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
+
 }

@@ -48,4 +48,16 @@ router.get(
   routesController.getHistoryStats
 );
 
+router.get(
+  '/checkpoints/active',
+  authenticate,
+  routesController.getActiveCheckpoints
+);
+
+router.get(
+  '/incidents/active',
+  authenticate,
+  routesController.getActiveIncidents
+);
+
 export default router;
