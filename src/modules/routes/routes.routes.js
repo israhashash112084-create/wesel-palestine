@@ -42,4 +42,10 @@ router.get(
   routesController.getAreasStatus
 );
 
+router.get(
+  '/history/stats',
+  authenticate,
+  routesController.getHistoryStats
+);
+
 export default router;

@@ -156,4 +156,48 @@ async findIncidentsByArea() {
     },
   });
 }
+
+async getUserRouteHistoryStats(userId) {
+  return prisma.routeHistory.aggregate({
+    where: { userId },
+    _count: {
+      id: true,
+    },
+    _sum: {
+      distanceKm: true,
+      totalDelayMinutes: true,
+    },
+    _avg: {
+      totalDelayMinutes: true,
+    },
+  });
+}
+
+async countUserFallbackRoutes(userId) {
+  return prisma.routeHistory.count({
+    where: {
+      userId,
+      isFallback: true,
+    },
+  });
+}
+
+async findMostVisitedRoute(userId) {
+  const groupedRoutes = await prisma.routeHistory.groupBy({
+    by: ['fromLat', 'fromLng', 'toLat', 'toLng'],
+    where: { userId },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _count: {
+        id: 'desc',
+      },
+    },
+    take: 1,
+  });
+
+  return groupedRoutes[0] ?? null;
+}
+
 }

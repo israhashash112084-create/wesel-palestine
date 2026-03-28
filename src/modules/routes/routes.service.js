@@ -788,4 +788,32 @@ async getAreasStatus() {
 
   return result;
 }
+
+async getRouteHistoryStats(userId) {
+  const [stats, fallbackCount, mostVisitedRoute] = await Promise.all([
+    this.routesRepository.getUserRouteHistoryStats(userId),
+    this.routesRepository.countUserFallbackRoutes(userId),
+    this.routesRepository.findMostVisitedRoute(userId),
+  ]);
+
+  return {
+    totalRoutes: stats._count.id ?? 0,
+    totalDistanceKm: Number(stats._sum.distanceKm ?? 0),
+    averageDelayMinutes: Number(stats._avg.totalDelayMinutes ?? 0),
+    fallbackCount,
+    mostVisitedRoute: mostVisitedRoute
+      ? {
+          from: {
+            lat: Number(mostVisitedRoute.fromLat),
+            lng: Number(mostVisitedRoute.fromLng),
+          },
+          to: {
+            lat: Number(mostVisitedRoute.toLat),
+            lng: Number(mostVisitedRoute.toLng),
+          },
+          count: mostVisitedRoute._count.id,
+        }
+      : null,
+  };
+}
 }

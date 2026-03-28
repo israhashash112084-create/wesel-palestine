@@ -43,4 +43,12 @@ getAreasStatus = async (req, res) => {
   });
 };
 
+getHistoryStats = async (req, res) => {
+  const result = await this.routesService.getRouteHistoryStats(req.userInfo.id);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
 }
