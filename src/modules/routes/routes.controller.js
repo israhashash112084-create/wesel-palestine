@@ -34,4 +34,13 @@ compare = async (req, res) => {
   });
 };
 
+getAreasStatus = async (req, res) => {
+  const result = await this.routesService.getAreasStatus();
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
+
 }

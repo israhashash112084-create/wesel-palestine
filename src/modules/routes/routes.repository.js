@@ -130,4 +130,30 @@ async countUserRouteHistory(userId) {
     where: { userId },
   });
 }
+
+async findCheckpointsByArea() {
+  return prisma.checkpoint.findMany({
+    where: {
+      status: {
+        in: [TRAFFIC_STATUSES.CLOSED, TRAFFIC_STATUSES.SLOW],
+      },
+    },
+    select: {
+      status: true,
+      city: true,
+    },
+  });
+}
+
+async findIncidentsByArea() {
+  return prisma.incident.findMany({
+    where: {
+      status: INCIDENT_STATUSES.VERIFIED,
+    },
+    select: {
+      severity: true,
+      area: true,
+    },
+  });
+}
 }

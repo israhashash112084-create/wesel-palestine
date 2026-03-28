@@ -36,4 +36,10 @@ router.get(
   routesController.getHistory
 );
 
+router.get(
+  '/areas/status',
+  authenticate,
+  routesController.getAreasStatus
+);
+
 export default router;

@@ -738,4 +738,54 @@ async compareRoutes({ from, to, scenarios }, userId) {
   };
 }
 
+async getAreasStatus() {
+  const [checkpoints, incidents] = await Promise.all([
+    this.routesRepository.findCheckpointsByArea(),
+    this.routesRepository.findIncidentsByArea(),
+  ]);
+
+  const areas = Object.keys(AREA_BOUNDARIES);
+  const result = {};
+
+  for (const area of areas) {
+    const areaCheckpoints = checkpoints.filter(
+      (cp) => _normalizeArea(cp.city) === area
+    );
+
+    const areaIncidents = incidents.filter(
+      (inc) => _normalizeArea(inc.area) === area
+    );
+
+    const closedCheckpoints = areaCheckpoints.filter(
+      (cp) => cp.status === TRAFFIC_STATUSES.CLOSED
+    ).length;
+
+    const criticalIncidents = areaIncidents.filter(
+      (inc) =>
+        inc.severity === INCIDENT_SEVERITIES.CRITICAL ||
+        inc.severity === INCIDENT_SEVERITIES.HIGH
+    ).length;
+
+    let status;
+    if (closedCheckpoints >= 2 || criticalIncidents >= 2) {
+      status = 'high_risk';
+    } else if (closedCheckpoints === 1 || criticalIncidents === 1) {
+       status = 'moderate_risk';
+    } else if (areaCheckpoints.length >= 1 || areaIncidents.length >= 1) {
+      status = 'low_risk';
+    } else {
+      status = 'clear';
+    }
+
+    result[area] = {
+      status,
+      checkpoints: areaCheckpoints.length,
+      closedCheckpoints,
+      incidents: areaIncidents.length,
+      criticalIncidents,
+    };
+  }
+
+  return result;
+}
 }
