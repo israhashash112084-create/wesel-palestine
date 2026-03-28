@@ -200,4 +200,22 @@ async findMostVisitedRoute(userId) {
   return groupedRoutes[0] ?? null;
 }
 
+async findRouteById(id, userId) {
+  return prisma.routeHistory.findFirst({
+    where: {
+      id,
+      userId, 
+    },
+  });
+}
+
+async deleteRouteById(id, userId) {
+  return prisma.routeHistory.deleteMany({
+    where: {
+      id,
+      userId,
+    },
+  });
+}
+
 }

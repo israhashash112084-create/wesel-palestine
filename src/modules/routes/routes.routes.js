@@ -60,4 +60,15 @@ router.get(
   routesController.getActiveIncidents
 );
 
+router.get(
+  '/history/:id',
+  authenticate,
+  routesController.getRouteById
+);
+
+router.delete(
+  '/history/:id',
+  authenticate,
+  routesController.deleteRouteById
+);
 export default router;

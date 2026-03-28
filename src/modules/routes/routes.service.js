@@ -846,4 +846,42 @@ async getActiveIncidents() {
     area: inc.area ?? null,
   }));
 }
+
+async getRouteById(id, userId) {
+  const route = await this.routesRepository.findRouteById(Number(id), userId);
+
+  if (!route) {
+    throw new BadRequestError('Route not found');
+  }
+
+  return {
+    id: route.id,
+    from: {
+      lat: Number(route.fromLat),
+      lng: Number(route.fromLng),
+    },
+    to: {
+      lat: Number(route.toLat),
+      lng: Number(route.toLng),
+    },
+    distanceKm: Number(route.distanceKm),
+    baseDurationMinutes: Number(route.baseDurationMinutes),
+    finalDurationMinutes: Number(route.finalDurationMinutes),
+    totalDelayMinutes: route.totalDelayMinutes,
+    isFallback: route.isFallback,
+    createdAt: route.createdAt,
+  };
+}
+
+async deleteRouteById(id, userId) {
+  const deleted = await this.routesRepository.deleteRouteById(Number(id), userId);
+
+  if (deleted.count === 0) {
+    throw new BadRequestError('Route not found');
+  }
+
+  return {
+    message: 'Route deleted successfully',
+  };
+}
 }

@@ -70,4 +70,33 @@ getActiveIncidents = async (req, res) => {
   });
 };
 
+getRouteById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await this.routesService.getRouteById(id, req.userInfo.id);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+deleteRouteById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await this.routesService.deleteRouteById(id, req.userInfo.id);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 }
