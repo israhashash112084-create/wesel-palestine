@@ -1,41 +1,58 @@
 import { BadRequestError } from '#shared/utils/errors.js';
 import { logger } from '#shared/utils/logger.js';
+import { INCIDENT_TYPES } from '#shared/constants/enums.js';
 import {
-  reverseGeocodeBilingual,
+  reverseGeocodeComponents,
   areaMatchesLocation,
 } from '#integrations/geocoding/geocoding.service.js';
+
 export const validateAreaLocation = async (req, _res, next) => {
-  const { locationLat, locationLng, area } = req.body;
+  if (
+    req.body?.type === INCIDENT_TYPES.CHECKPOINT_STATUS_UPDATE ||
+    (req.body?.checkpointId !== undefined && req.body?.proposedCheckpointStatus !== undefined)
+  ) {
+    return next();
+  }
 
-  const geocoded = await reverseGeocodeBilingual(locationLat, locationLng);
+  const loc = req.body?.location ?? {
+    latitude: req.body?.latitude ?? req.body?.locationLat,
+    longitude: req.body?.longitude ?? req.body?.locationLng,
+    area: req.body?.area,
+  };
 
-  if (!geocoded.en && !geocoded.ar) {
+  const { latitude, longitude, area } = loc;
+
+  if (latitude === undefined || longitude === undefined || area === undefined) {
+    return next();
+  }
+
+  const geocoded = await reverseGeocodeComponents(Number(latitude), Number(longitude));
+
+  if (!geocoded) {
     logger.warn('[validateAreaLocation] Geocoding unavailable — skipping area check', {
-      locationLat,
-      locationLng,
+      latitude,
+      longitude,
       area,
     });
     return next();
   }
 
-  const isMatch = areaMatchesLocation(area, geocoded);
+  const displayName = [geocoded.city, geocoded.area, geocoded.road].filter(Boolean).join(', ');
+  const isMatch = areaMatchesLocation(area, displayName);
 
   if (!isMatch) {
-    const detectedArea = geocoded.primaryEn ?? geocoded.primaryAr ?? geocoded.en ?? geocoded.ar;
-
     logger.info('[validateAreaLocation] Area mismatch', {
       provided: area,
-      primaryEn: geocoded.primaryEn,
-      primaryAr: geocoded.primaryAr,
-      locationLat,
-      locationLng,
+      detected: displayName,
+      latitude,
+      longitude,
     });
 
     throw new BadRequestError(
-      `Area "${area}" does not match the provided location. ` +
-        `Based on the coordinates, the area appears to be: ${detectedArea}`
+      `Area "${area}" does not match the provided coordinates. ` +
+        `Detected area: ${displayName || 'unknown'}`
     );
   }
 
-  next();
+  return next();
 };

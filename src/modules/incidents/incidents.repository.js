@@ -11,6 +11,8 @@ export class IncidentsRepository {
       locationLat: true,
       locationLng: true,
       area: true,
+      road: true,
+      city: true,
       type: true,
       status: true,
       severity: true,
@@ -24,7 +26,7 @@ export class IncidentsRepository {
         select: {
           id: true,
           name: true,
-          areaName: true,
+          area: true,
         },
       },
       reporter: {
@@ -107,6 +109,8 @@ export class IncidentsRepository {
         locationLat: data.locationLat,
         locationLng: data.locationLng,
         area: data.area,
+        road: data.road ?? null,
+        city: data.city ?? null,
         type: data.type,
         severity: data.severity,
         description: data.description,
@@ -209,8 +213,18 @@ export class IncidentsRepository {
   }
 
   async updateWithStatusHistory(id, data) {
-    const updatedIncident = await prismaTransaction(async (tx) => {
-      const incident = await tx.incident.update({
+    const existingIncident = await prisma.incident.findUnique({
+      where: { id },
+      select: {
+        status: true,
+      },
+    });
+
+    const oldStatus = data.oldStatus ?? existingIncident?.status;
+    const newStatus = data.newStatus ?? data.status ?? existingIncident?.status;
+
+    const [updatedIncident] = await prisma.$transaction([
+      prisma.incident.update({
         where: { id },
         data: {
           severity: data.severity,
@@ -231,22 +245,20 @@ export class IncidentsRepository {
           resolvedAt: data.resolvedAt,
         },
         select: this._baseSelect(),
-      });
-
-      await tx.incidentStatusHistory.create({
+      }),
+      prisma.incidentStatusHistory.create({
         data: {
           incidentId: id,
           changedBy: data.changedBy,
-          oldStatus: data.oldStatus,
-          newStatus: data.status ?? data.oldStatus,
+          oldStatus,
+          newStatus,
           notes: data.notes,
           oldValues: data.oldValues,
           newValues: data.newValues,
         },
-      });
+      }),
+    ]);
 
-      return incident;
-    });
     return updatedIncident;
   }
 

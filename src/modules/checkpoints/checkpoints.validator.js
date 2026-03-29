@@ -44,7 +44,7 @@ export const createCheckpointSchema = Joi.object({
     'string.max': 'Checkpoint name must not exceed 100 characters',
     'any.required': 'Checkpoint name is required',
   }),
-  areaName: Joi.string().max(100).optional().messages({
+  area: Joi.string().max(100).optional().messages({
     'string.max': 'Area name must not exceed 100 characters',
   }),
   description: Joi.string().max(1000).optional().messages({
@@ -67,7 +67,7 @@ export const updateCheckpointSchema = Joi.object({
     'string.min': 'Checkpoint name must be at least 2 characters',
     'string.max': 'Checkpoint name must not exceed 100 characters',
   }),
-  areaName: Joi.string().max(100).optional().messages({
+  area: Joi.string().max(100).optional().messages({
     'string.max': 'Area name must not exceed 100 characters',
   }),
   description: Joi.string().max(1000).optional().messages({

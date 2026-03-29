@@ -31,6 +31,8 @@ export const createIncidentSchema = Joi.object({
   locationLat: locationLatSchema.required(),
   locationLng: locationLngSchema.required(),
   area: Joi.string().max(100).optional(),
+  road: Joi.string().max(255).optional(),
+  city: Joi.string().max(255).optional(),
   type: Joi.string()
     .max(100)
     .required()

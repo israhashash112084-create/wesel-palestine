@@ -3,26 +3,16 @@ import {
   INCIDENT_TYPES,
   REPORT_STATUSES,
   INCIDENT_SEVERITIES,
-  MODERATION_ACTIONS,
+  TRAFFIC_STATUSES,
 } from '#shared/constants/enums.js';
+import { locationInputSchema } from '#shared/utils/query-validator.js';
+
 const VALID_SEVERITIES = Object.values(INCIDENT_SEVERITIES);
 const VALID_TYPES = Object.values(INCIDENT_TYPES);
 const VALID_STATUSES = Object.values(REPORT_STATUSES);
-const VALID_ACTIONS = Object.values(MODERATION_ACTIONS);
+const VALID_TRAFFIC_STATUSES = Object.values(TRAFFIC_STATUSES);
 
-const locationLat = Joi.number().min(31.2).max(32.6).messages({
-  'number.min': 'locationLat out of range: must be between 31.2 and 32.6 (West Bank boundaries)',
-  'number.max': 'locationLat out of range: must be between 31.2 and 32.6 (West Bank boundaries)',
-  'any.required': 'locationLat is required',
-});
-
-const locationLng = Joi.number().min(34.9).max(35.6).messages({
-  'number.min': 'locationLng out of range: must be between 34.9 and 35.6 (West Bank boundaries)',
-  'number.max': 'locationLng out of range: must be between 34.9 and 35.6 (West Bank boundaries)',
-  'any.required': 'locationLng is required',
-});
-
-const area = Joi.string().min(2).max(255);
+const CHECKPOINT_TYPE = INCIDENT_TYPES.CHECKPOINT_STATUS_UPDATE;
 
 const type = Joi.string()
   .valid(...VALID_TYPES)
@@ -44,32 +34,118 @@ const description = Joi.string().min(10).max(1000).messages({
   'any.required': 'description is required',
 });
 
-export const ReportSchema = Joi.object({
-  locationLat: locationLat.required(),
-  locationLng: locationLng.required(),
-
-  area: area.required().messages({
-    'string.min': 'area must be at least 2 characters',
-    'string.max': 'area must not exceed 255 characters',
-    'any.required': 'area is required',
-  }),
-
-  type: type.required(),
-  severity: severity.required(),
-  description: description.required(),
+const checkpointId = Joi.number().integer().min(1).messages({
+  'number.base': 'checkpointId must be a number',
+  'number.integer': 'checkpointId must be an integer',
+  'number.min': 'checkpointId must be a positive integer',
 });
 
+const proposedCheckpointStatus = Joi.string()
+  .valid(...VALID_TRAFFIC_STATUSES)
+  .messages({
+    'any.only': `proposedCheckpointStatus must be one of: ${VALID_TRAFFIC_STATUSES.join(', ')}`,
+  });
+export const ReportSchema = Joi.object({
+  location: locationInputSchema.optional(),
+
+  type: type.optional(),
+  severity: severity.optional(),
+  description: description.optional(),
+
+  checkpointId: checkpointId.optional(),
+  proposedCheckpointStatus: proposedCheckpointStatus.optional(),
+})
+  .custom((value, helpers) => {
+    const isCheckpointType = value.type === CHECKPOINT_TYPE;
+    const hasCheckpointFields =
+      value.checkpointId !== undefined || value.proposedCheckpointStatus !== undefined;
+    const isCheckpointReport = isCheckpointType || hasCheckpointFields;
+
+    if (isCheckpointReport) {
+      if (value.checkpointId === undefined || value.proposedCheckpointStatus === undefined) {
+        return helpers.error('any.invalid', {
+          message:
+            'checkpointId and proposedCheckpointStatus are both required for checkpoint reports',
+        });
+      }
+
+      if (value.location !== undefined) {
+        return helpers.error('any.invalid', {
+          message: 'location is not allowed for checkpoint status reports',
+        });
+      }
+
+      value.type = CHECKPOINT_TYPE;
+      value.severity = value.severity ?? INCIDENT_SEVERITIES.LOW;
+      value.description = value.description ?? 'Checkpoint status update report';
+      return value;
+    }
+
+    if (!value.location) {
+      return helpers.error('any.invalid', {
+        message: 'location is required for standard reports',
+      });
+    }
+
+    if (value.type === undefined) {
+      return helpers.error('any.invalid', { message: 'type is required' });
+    }
+
+    if (value.severity === undefined) {
+      return helpers.error('any.invalid', { message: 'severity is required' });
+    }
+
+    if (value.description === undefined) {
+      return helpers.error('any.invalid', { message: 'description is required' });
+    }
+
+    return value;
+  })
+  .messages({ 'any.invalid': '{{#message}}' });
+
 export const updateReportSchema = Joi.object({
-  locationLat,
-  locationLng,
-  area,
-  type,
-  severity,
-  description,
+  location: locationInputSchema.optional(),
+  type: type.optional(),
+  severity: severity.optional(),
+  description: description.optional(),
+  checkpointId: checkpointId.optional(),
+  proposedCheckpointStatus: proposedCheckpointStatus.optional(),
 })
   .min(1)
+  .custom((value, helpers) => {
+    const isCheckpointType = value.type === CHECKPOINT_TYPE;
+    const hasCheckpointFields =
+      value.checkpointId !== undefined || value.proposedCheckpointStatus !== undefined;
+
+    if (hasCheckpointFields && value.type !== undefined && !isCheckpointType) {
+      return helpers.error('any.invalid', {
+        message: 'checkpointId / proposedCheckpointStatus are only allowed for checkpoint reports',
+      });
+    }
+
+    if (isCheckpointType || hasCheckpointFields) {
+      if (value.checkpointId === undefined || value.proposedCheckpointStatus === undefined) {
+        return helpers.error('any.invalid', {
+          message:
+            'Both checkpointId and proposedCheckpointStatus are required when updating a checkpoint report',
+        });
+      }
+
+      if (value.location !== undefined) {
+        return helpers.error('any.invalid', {
+          message: 'location is not allowed when updating a checkpoint report',
+        });
+      }
+
+      value.type = CHECKPOINT_TYPE;
+      value.severity = value.severity ?? INCIDENT_SEVERITIES.LOW;
+    }
+
+    return value;
+  })
   .messages({
     'object.min': 'At least one field must be provided for update',
+    'any.invalid': '{{#message}}',
   });
 
 export const listReportsSchema = Joi.object({
@@ -85,12 +161,14 @@ export const listReportsSchema = Joi.object({
   sortBy: Joi.string().valid('createdAt', 'confidenceScore').default('createdAt'),
   sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
 });
+
 export const voteReportSchema = Joi.object({
   vote: Joi.string().valid('up', 'down').required().messages({
     'any.only': 'vote must be either up or down',
     'any.required': 'vote is required',
   }),
 });
+
 export const reportIdSchema = Joi.object({
   id: Joi.number().integer().min(1).required().messages({
     'number.base': 'Report ID must be a number',
@@ -99,14 +177,12 @@ export const reportIdSchema = Joi.object({
     'any.required': 'Report ID is required',
   }),
 });
+
 export const moderateReportSchema = Joi.object({
-  action: Joi.string()
-    .valid(...VALID_ACTIONS)
-    .required()
-    .messages({
-      'any.only': 'action must be either approved or rejected',
-      'any.required': 'action is required',
-    }),
+  action: Joi.string().valid('approve', 'reject').required().messages({
+    'any.only': 'action must be either approved or rejected',
+    'any.required': 'action is required',
+  }),
 
   reason: Joi.when('action', {
     is: 'reject',
