@@ -5,19 +5,15 @@ import {
   limitQuerySchema,
   sortOrderQuerySchema,
   positiveIntegerIdSchema,
+  westBankLatitudeSchema,
+  westBankLongitudeSchema,
 } from '#shared/utils/query-validator.js';
 
 const trafficStatuses = Object.values(TRAFFIC_STATUSES);
 
-const latitudeBounds = Joi.number().min(31.2).max(32.6).messages({
-  'number.min': 'Latitude must be within the West Bank boundaries [31.2, 32.6]',
-  'number.max': 'Latitude must be within the West Bank boundaries [31.2, 32.6]',
-});
+const latitudeBounds = westBankLatitudeSchema;
 
-const longitudeBounds = Joi.number().min(34.9).max(35.6).messages({
-  'number.min': 'Longitude must be within the West Bank boundaries [34.9, 35.6]',
-  'number.max': 'Longitude must be within the West Bank boundaries [34.9, 35.6]',
-});
+const longitudeBounds = westBankLongitudeSchema;
 
 export const listCheckpointsSchema = Joi.object({
   status: Joi.string()

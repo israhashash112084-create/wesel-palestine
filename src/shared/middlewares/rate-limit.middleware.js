@@ -7,15 +7,12 @@ import { ConflictError } from '#shared/utils/errors.js';
 /**
  * @param {{ max: number, windowSec: number, message?: string }} options
  */
-const createRateLimiter = ({ max, windowSec, message }) =>
-  rateLimit({
+const createRateLimiter = ({ max, windowSec, message }) => {
+  const options = {
     windowMs: windowSec * 1000,
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    store: new RedisStore({
-      sendCommand: (...args) => redisClient.sendCommand(args),
-    }),
     keyGenerator: (req) => req.userInfo?.id ?? req.ip,
     handler: (_req, res) => {
       res.status(429).json({
@@ -23,7 +20,16 @@ const createRateLimiter = ({ max, windowSec, message }) =>
         message: message ?? 'Too many requests. Please try again later.',
       });
     },
-  });
+  };
+
+  if (redisClient) {
+    options.store = new RedisStore({
+      sendCommand: (...args) => redisClient.sendCommand(args),
+    });
+  }
+
+  return rateLimit(options);
+};
 
 export const reportSubmitLimiter = createRateLimiter({
   max: parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
