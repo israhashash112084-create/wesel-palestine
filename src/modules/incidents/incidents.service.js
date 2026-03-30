@@ -7,7 +7,11 @@ import {
   NotFoundError,
 } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
-import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
+import {
+  INCIDENT_STATUS_TRANSITIONS,
+  INCIDENT_STATUSES,
+  TRAFFIC_STATUSES,
+} from '#shared/constants/enums.js';
 import { UserRoles } from '#shared/constants/roles.js';
 import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
 import { logger } from '#shared/utils/logger.js';
@@ -177,6 +181,27 @@ export class IncidentsService {
       trafficStatus: body.trafficStatus,
       ...overrides,
     };
+  }
+
+  _isTransitionAllowed(currentStatus, nextStatus) {
+    const allowedTransitions = INCIDENT_STATUS_TRANSITIONS[currentStatus] ?? [];
+    return allowedTransitions.includes(nextStatus);
+  }
+
+  _assertValidStatusTransition(currentStatus, nextStatus, { closedMessage } = {}) {
+    if (currentStatus === nextStatus) {
+      throw new ConflictError(`Incident is already ${nextStatus}`);
+    }
+
+    if (!this._isTransitionAllowed(currentStatus, nextStatus)) {
+      if (currentStatus === INCIDENT_STATUSES.CLOSED) {
+        throw new ConflictError(closedMessage ?? 'Closed incidents cannot be modified');
+      }
+
+      throw new ConflictError(
+        `Invalid incident status transition from ${currentStatus} to ${nextStatus}`
+      );
+    }
   }
 
   async _ensureNoCreateDuplicate({ actorId, body }) {
@@ -539,9 +564,9 @@ export class IncidentsService {
           throw new NotFoundError('Incident not found');
         }
 
-        if (existingIncident.status === INCIDENT_STATUSES.CLOSED) {
-          throw new ConflictError('Incident is already closed');
-        }
+        this._assertValidStatusTransition(existingIncident.status, INCIDENT_STATUSES.CLOSED, {
+          closedMessage: 'Incident is already closed',
+        });
 
         const incident = await this.repo.updateWithStatusHistory(id, {
           status: INCIDENT_STATUSES.CLOSED,
@@ -675,11 +700,7 @@ export class IncidentsService {
       throw new ForbiddenError('Authentication required to moderate incident');
     }
 
-    if (existingIncident.status === INCIDENT_STATUSES.CLOSED)
-      throw new ConflictError('Closed incidents cannot be modified');
-
-    if (existingIncident.status === newStatus)
-      throw new ConflictError(`Incident is already ${newStatus}`);
+    this._assertValidStatusTransition(existingIncident.status, newStatus);
 
     const now = new Date();
     const actorId = userInfo?.id ?? null;
