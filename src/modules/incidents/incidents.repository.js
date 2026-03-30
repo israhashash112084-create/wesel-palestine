@@ -1,6 +1,14 @@
 import { prisma, prismaTransaction } from '#database/db.js';
-import { getBoundingBoxByRadiusMeters } from '#shared/utils/geo.js';
+import {
+  findNearestCandidateWithinRadiusMeters,
+  getBoundingBoxByRadiusMeters,
+} from '#shared/utils/geo.js';
 import { toCountMap } from '#shared/utils/count-map.js';
+import { INCIDENT_STATUSES } from '#shared/constants/enums.js';
+
+const DUPLICATE_RADIUS_METERS = 500;
+const GLOBAL_DUPLICATE_WINDOW_MS = 2 * 60 * 60 * 1000;
+const USER_DUPLICATE_WINDOW_MS = 60 * 60 * 1000;
 
 export class IncidentsRepository {
   _baseSelect() {
@@ -194,6 +202,112 @@ export class IncidentsRepository {
     });
 
     return incident;
+  }
+
+  async findUserDuplicateIncident({
+    reportedBy,
+    locationLat,
+    locationLng,
+    type,
+    severity,
+    checkpointId,
+    excludeId = null,
+  }) {
+    const createdAfter = new Date(Date.now() - USER_DUPLICATE_WINDOW_MS);
+
+    const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(
+      locationLat,
+      locationLng,
+      DUPLICATE_RADIUS_METERS
+    );
+
+    const where = {
+      reportedBy,
+      type,
+      severity,
+      status: {
+        in: [INCIDENT_STATUSES.PENDING, INCIDENT_STATUSES.VERIFIED],
+      },
+      createdAt: { gte: createdAfter },
+      locationLat: {
+        gte: minLat,
+        lte: maxLat,
+      },
+      locationLng: {
+        gte: minLng,
+        lte: maxLng,
+      },
+      ...(checkpointId !== undefined ? { checkpointId: checkpointId ?? null } : {}),
+      ...(excludeId !== null ? { id: { not: excludeId } } : {}),
+    };
+
+    const candidates = await prisma.incident.findMany({
+      where,
+      select: this._baseSelect(),
+    });
+
+    const nearest = findNearestCandidateWithinRadiusMeters({
+      originLat: locationLat,
+      originLng: locationLng,
+      candidates,
+      radiusMeters: DUPLICATE_RADIUS_METERS,
+      getLat: (candidate) => candidate.locationLat,
+      getLng: (candidate) => candidate.locationLng,
+    });
+
+    return nearest?.candidate ?? null;
+  }
+
+  async findNearbyDuplicateIncident({
+    locationLat,
+    locationLng,
+    type,
+    severity,
+    checkpointId,
+    excludeId = null,
+  }) {
+    const createdAfter = new Date(Date.now() - GLOBAL_DUPLICATE_WINDOW_MS);
+
+    const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(
+      locationLat,
+      locationLng,
+      DUPLICATE_RADIUS_METERS
+    );
+
+    const where = {
+      type,
+      severity,
+      status: {
+        in: [INCIDENT_STATUSES.PENDING, INCIDENT_STATUSES.VERIFIED],
+      },
+      createdAt: { gte: createdAfter },
+      locationLat: {
+        gte: minLat,
+        lte: maxLat,
+      },
+      locationLng: {
+        gte: minLng,
+        lte: maxLng,
+      },
+      ...(checkpointId !== undefined ? { checkpointId: checkpointId ?? null } : {}),
+      ...(excludeId !== null ? { id: { not: excludeId } } : {}),
+    };
+
+    const candidates = await prisma.incident.findMany({
+      where,
+      select: this._baseSelect(),
+    });
+
+    const nearest = findNearestCandidateWithinRadiusMeters({
+      originLat: locationLat,
+      originLng: locationLng,
+      candidates,
+      radiusMeters: DUPLICATE_RADIUS_METERS,
+      getLat: (candidate) => candidate.locationLat,
+      getLng: (candidate) => candidate.locationLng,
+    });
+
+    return nearest?.candidate ?? null;
   }
 
   async update(id, data) {
