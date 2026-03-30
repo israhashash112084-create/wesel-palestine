@@ -86,7 +86,7 @@ export class AuthRepository {
    * @param {string} tokenHash
    */
   async deleteRefreshToken(tokenHash) {
-    await prisma.refreshToken.delete({
+    await prisma.refreshToken.deleteMany({
       where: { tokenHash },
     });
   }

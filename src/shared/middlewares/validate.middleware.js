@@ -1,7 +1,7 @@
 import { ValidationError } from '#shared/utils/errors.js';
 
 /** @type {ReadonlySet<string>} */
-const VALID_LOCATIONS = Object.freeze(new Set(['body', 'headers', 'params', 'query']));
+const VALID_LOCATIONS = Object.freeze(new Set(['body', 'headers', 'params', 'query', 'cookies']));
 
 /**
  * Default Joi validation options applied to all `validateRequest` calls.
@@ -41,7 +41,7 @@ const validationOptions = {
  * global error handler automatically.
  *
  * @param {import('joi').Schema} schema - Joi schema to validate against.
- * @param {'body'|'headers'|'params'|'query'} [location='body'] - Request property to validate.
+ * @param {'body'|'headers'|'params'|'query'|'cookies'} [location='body'] - Request property to validate.
  * @returns {import('express').RequestHandler}
  * @throws {TypeError} If `schema` is not a Joi schema or `location` is invalid.
  * @throws {ValidationError} (at request time) If validation fails.

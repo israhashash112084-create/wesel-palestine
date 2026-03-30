@@ -43,6 +43,24 @@ export const routeEstimateLimiter = createRateLimiter({
   message: `Too many route requests. You can only request ${env.ROUTE_LIMIT_MAX_REQUESTS} routes every ${parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
 
+export const authRegisterLimiter = createRateLimiter({
+  max: parseInt(env.AUTH_REGISTER_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.AUTH_REGISTER_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `Too many registration attempts. You can only register ${env.AUTH_REGISTER_LIMIT_MAX_REQUESTS} times every ${parseInt(env.AUTH_REGISTER_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
+export const authLoginLimiter = createRateLimiter({
+  max: parseInt(env.AUTH_LOGIN_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.AUTH_LOGIN_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `Too many login attempts. Try again after ${parseInt(env.AUTH_LOGIN_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
+export const authRefreshLimiter = createRateLimiter({
+  max: parseInt(env.AUTH_REFRESH_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.AUTH_REFRESH_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `Too many token refresh attempts. Try again after ${parseInt(env.AUTH_REFRESH_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
 export const checkAreaReportLimit = async (userId, area) => {
   if (!area || typeof area !== 'string') {
     return;

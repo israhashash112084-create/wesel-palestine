@@ -36,57 +36,80 @@ export class AuthController {
     this.authService = authService;
   }
 
-  register = async (req, res) => {
-    const user = await this.authService.register(req.body);
-    res.status(201).json({ success: true, data: { user } });
-  };
-
-  login = async (req, res) => {
-    const deviceInfo = {
-      deviceId: req.headers['x-device-id'] ?? _fingerprintDevice(req),
-      deviceName: req.headers['user-agent'] ?? 'Unknown Device',
-    };
-
-    const { user, accessToken, refreshToken } = await this.authService.login(req.body, deviceInfo);
-
-    res.cookie('refreshToken', refreshToken, {
-      ...COOKIE_OPTIONS,
-      maxAge: REFRESH_TOKEN_MAX_AGE,
-    });
-
-    res.status(200).json({ success: true, data: { user, accessToken } });
-  };
-
-  refresh = async (req, res) => {
-    const refreshToken = req.cookies?.refreshToken;
-
-    if (!refreshToken) {
-      throw new UnauthorizedError('No refresh token provided');
+  register = async (req, res, next) => {
+    try {
+      const user = await this.authService.register(req.body);
+      res.status(201).json({ success: true, data: { user } });
+    } catch (err) {
+      next(err);
     }
-
-    const { accessToken, newRefreshToken } = await this.authService.refresh(refreshToken);
-
-    res.cookie('refreshToken', newRefreshToken, {
-      ...COOKIE_OPTIONS,
-      maxAge: REFRESH_TOKEN_MAX_AGE,
-    });
-
-    res.status(200).json({ success: true, data: { accessToken } });
   };
 
-  logout = async (req, res) => {
-    const refreshToken = req.cookies?.refreshToken;
+  login = async (req, res, next) => {
+    try {
+      const deviceInfo = {
+        deviceId: req.headers['x-device-id'] ?? _fingerprintDevice(req),
+        deviceName: req.headers['user-agent'] ?? 'Unknown Device',
+      };
 
-    if (refreshToken) {
-      await this.authService.logout(refreshToken);
+      const { user, accessToken, refreshToken } = await this.authService.login(
+        req.body,
+        deviceInfo
+      );
+
+      res.cookie('refreshToken', refreshToken, {
+        ...COOKIE_OPTIONS,
+        maxAge: REFRESH_TOKEN_MAX_AGE,
+      });
+
+      res.status(200).json({ success: true, data: { user, accessToken } });
+    } catch (err) {
+      next(err);
     }
-
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
-    res.status(200).json({ success: true });
   };
 
-  me = async (req, res) => {
-    res.status(200).json({ success: true, data: { user: req.userInfo } });
+  refresh = async (req, res, next) => {
+    try {
+      const refreshToken = req.cookies?.refreshToken;
+
+      if (!refreshToken) {
+        throw new UnauthorizedError('No refresh token provided');
+      }
+
+      const { accessToken, newRefreshToken } = await this.authService.refresh(refreshToken);
+
+      res.cookie('refreshToken', newRefreshToken, {
+        ...COOKIE_OPTIONS,
+        maxAge: REFRESH_TOKEN_MAX_AGE,
+      });
+
+      res.status(200).json({ success: true, data: { accessToken } });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  logout = async (req, res, next) => {
+    try {
+      const refreshToken = req.cookies?.refreshToken;
+
+      if (refreshToken) {
+        await this.authService.logout(refreshToken);
+      }
+
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      res.status(200).json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  me = async (req, res, next) => {
+    try {
+      res.status(200).json({ success: true, data: { user: req.userInfo } });
+    } catch (err) {
+      next(err);
+    }
   };
 }

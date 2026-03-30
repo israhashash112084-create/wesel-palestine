@@ -4,7 +4,12 @@ import { AuthService } from './auth.service.js';
 import { AuthController } from './auth.controller.js';
 import { authenticate } from '#shared/middlewares/auth.middleware.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
-import { registerSchema, loginSchema } from './auth.validator.js';
+import {
+  authLoginLimiter,
+  authRefreshLimiter,
+  authRegisterLimiter,
+} from '#shared/middlewares/rate-limit.middleware.js';
+import { registerSchema, loginSchema, refreshCookieSchema } from './auth.validator.js';
 
 // Dependency injection composition root for the auth module
 const authRepository = new AuthRepository();
@@ -13,9 +18,19 @@ const authController = new AuthController(authService);
 
 const router = Router();
 
-router.post('/register', validateRequest(registerSchema, 'body'), authController.register);
-router.post('/login', validateRequest(loginSchema, 'body'), authController.login);
-router.post('/refresh', authController.refresh);
+router.post(
+  '/register',
+  authRegisterLimiter,
+  validateRequest(registerSchema, 'body'),
+  authController.register
+);
+router.post('/login', authLoginLimiter, validateRequest(loginSchema, 'body'), authController.login);
+router.post(
+  '/refresh',
+  authRefreshLimiter,
+  validateRequest(refreshCookieSchema, 'cookies'),
+  authController.refresh
+);
 router.post('/logout', authenticate, authController.logout);
 router.get('/me', authenticate, authController.me);
 

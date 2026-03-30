@@ -133,6 +133,8 @@ export class AuthService {
       deviceInfo.deviceName
     );
 
+    await this.authRepository.enforceSessionCap(user.id);
+
     return { accessToken, refreshToken };
   }
 }
