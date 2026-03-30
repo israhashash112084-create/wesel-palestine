@@ -9,6 +9,27 @@ export class IncidentsService {
     this.alertsService = alertsService;
   }
 
+  async getUserStats(userId, role) {
+    const baseStats = await this.repo.getUserReportedStats(userId);
+
+    if (role !== 'moderator' && role !== 'admin') {
+      return baseStats;
+    }
+
+    const moderationStats = await this.repo.getUserModerationStats(userId);
+
+    return {
+      counts: {
+        ...baseStats.counts,
+        ...moderationStats.counts,
+      },
+      breakdowns: {
+        ...baseStats.breakdowns,
+        ...moderationStats.breakdowns,
+      },
+    };
+  }
+
   _toComparableValue(value) {
     if (value === null || value === undefined) {
       return value;

@@ -61,6 +61,18 @@ export const authRefreshLimiter = createRateLimiter({
   message: `Too many token refresh attempts. Try again after ${parseInt(env.AUTH_REFRESH_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
 
+export const authLogoutLimiter = createRateLimiter({
+  max: parseInt(env.AUTH_LOGOUT_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.AUTH_LOGOUT_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `Too many logout attempts. Try again after ${parseInt(env.AUTH_LOGOUT_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
+export const authMeLimiter = createRateLimiter({
+  max: parseInt(env.AUTH_ME_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.AUTH_ME_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `Too many profile requests. Try again after ${parseInt(env.AUTH_ME_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
 export const checkAreaReportLimit = async (userId, area) => {
   if (!area || typeof area !== 'string') {
     return;

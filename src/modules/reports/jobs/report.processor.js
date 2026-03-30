@@ -20,9 +20,18 @@ const handleAutoReject = async (job) => {
 
   const { ReportsRepository } = await import('#modules/reports/reports.repository.js');
   const { ReportsService } = await import('#modules/reports/reports.service.js');
+  const { IncidentsRepository } = await import('#modules/incidents/incidents.repository.js');
+  const { IncidentsService } = await import('#modules/incidents/incidents.service.js');
+  const { CheckpointsRepository } = await import('#modules/checkpoints/checkpoints.repository.js');
+  const { CheckpointsService } = await import('#modules/checkpoints/checkpoints.service.js');
 
   const repo = new ReportsRepository();
-  const service = new ReportsService(repo);
+  const incidentsService = new IncidentsService(new IncidentsRepository());
+  const checkpointsService = new CheckpointsService(new CheckpointsRepository());
+  const service = new ReportsService(repo, {
+    incidentsService,
+    checkpointsService,
+  });
 
   const report = await repo.findById(reportId);
 

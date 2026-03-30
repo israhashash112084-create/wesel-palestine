@@ -107,7 +107,8 @@ export class AuthController {
 
   me = async (req, res, next) => {
     try {
-      res.status(200).json({ success: true, data: { user: req.userInfo } });
+      const result = await this.authService.me(req.userInfo.id);
+      res.status(200).json({ success: true, data: result });
     } catch (err) {
       next(err);
     }

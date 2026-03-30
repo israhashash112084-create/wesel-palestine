@@ -1,4 +1,5 @@
 import { prisma } from '#database/db.js';
+import { toCountMap } from '#shared/utils/count-map.js';
 
 export class AlertsRepository {
   async createSubscription({ userId, areaLat, areaLng, radiusKm, category }) {
@@ -90,5 +91,32 @@ export class AlertsRepository {
         status,
       },
     });
+  }
+
+  async getUserStats(userId) {
+    const [activeSubscriptionsByCategory, activeSubscriptions, inactiveSubscriptions] =
+      await Promise.all([
+        prisma.alertSubscription.groupBy({
+          by: ['category'],
+          where: { userId, isActive: true },
+          _count: { _all: true },
+        }),
+        prisma.alertSubscription.count({
+          where: { userId, isActive: true },
+        }),
+        prisma.alertSubscription.count({
+          where: { userId, isActive: false },
+        }),
+      ]);
+
+    return {
+      counts: {
+        activeSubscriptions,
+        inactiveSubscriptions,
+      },
+      breakdowns: {
+        activeSubscriptionsByCategory: toCountMap(activeSubscriptionsByCategory, 'category'),
+      },
+    };
   }
 }

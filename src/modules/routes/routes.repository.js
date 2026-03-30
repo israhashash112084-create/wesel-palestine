@@ -125,4 +125,48 @@ export class RoutesRepository {
       where: { userId },
     });
   }
+
+  async getUserStats(userId) {
+    const [routeHistoryAgg, routeHistoryByFallback] = await Promise.all([
+      prisma.routeHistory.aggregate({
+        where: { userId },
+        _count: { _all: true },
+        _sum: {
+          totalDelayMinutes: true,
+          distanceKm: true,
+        },
+        _avg: {
+          totalDelayMinutes: true,
+          distanceKm: true,
+        },
+      }),
+      prisma.routeHistory.groupBy({
+        by: ['isFallback'],
+        where: { userId },
+        _count: { _all: true },
+      }),
+    ]);
+
+    return {
+      counts: {
+        routeQueries: routeHistoryAgg._count._all ?? 0,
+      },
+      routeHistory: {
+        totalDelayMinutes: Number(routeHistoryAgg._sum.totalDelayMinutes ?? 0),
+        totalDistanceKm: Number(routeHistoryAgg._sum.distanceKm ?? 0),
+        avgDelayMinutes: Number(routeHistoryAgg._avg.totalDelayMinutes ?? 0),
+        avgDistanceKm: Number(routeHistoryAgg._avg.distanceKm ?? 0),
+        totalQueries: routeHistoryAgg._count._all ?? 0,
+      },
+      breakdowns: {
+        routeHistoryByMode: routeHistoryByFallback.reduce(
+          (acc, row) => {
+            acc[row.isFallback ? 'fallback' : 'primary'] = row._count._all;
+            return acc;
+          },
+          { primary: 0, fallback: 0 }
+        ),
+      },
+    };
+  }
 }

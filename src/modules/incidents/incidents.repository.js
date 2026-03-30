@@ -1,5 +1,6 @@
 import { prisma, prismaTransaction } from '#database/db.js';
 import { getBoundingBoxByRadiusMeters } from '#shared/utils/geo.js';
+import { toCountMap } from '#shared/utils/count-map.js';
 
 export class IncidentsRepository {
   _baseSelect() {
@@ -297,6 +298,46 @@ export class IncidentsRepository {
     return {
       history: records,
       total,
+    };
+  }
+
+  async getUserReportedStats(userId) {
+    const [reportedIncidentsByStatus, incidentsReported] = await Promise.all([
+      prisma.incident.groupBy({
+        by: ['status'],
+        where: { reportedBy: userId },
+        _count: { _all: true },
+      }),
+      prisma.incident.count({ where: { reportedBy: userId } }),
+    ]);
+
+    return {
+      counts: {
+        incidentsReported,
+      },
+      breakdowns: {
+        reportedIncidentsByStatus: toCountMap(reportedIncidentsByStatus, 'status'),
+      },
+    };
+  }
+
+  async getUserModerationStats(userId) {
+    const [moderatedIncidentsByStatus, incidentsModerated] = await Promise.all([
+      prisma.incident.groupBy({
+        by: ['status'],
+        where: { moderatedBy: userId },
+        _count: { _all: true },
+      }),
+      prisma.incident.count({ where: { moderatedBy: userId } }),
+    ]);
+
+    return {
+      counts: {
+        incidentsModerated,
+      },
+      breakdowns: {
+        moderatedIncidentsByStatus: toCountMap(moderatedIncidentsByStatus, 'status'),
+      },
     };
   }
 }

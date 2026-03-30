@@ -7,10 +7,6 @@ import {
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { UserRoles } from '#shared/constants/roles.js';
 import { INCIDENT_TYPES, REPORT_STATUSES } from '#shared/constants/enums.js';
-import { IncidentsService } from '#modules/incidents/incidents.service.js';
-import { IncidentsRepository } from '#modules/incidents/incidents.repository.js';
-import { CheckpointsService } from '#modules/checkpoints/checkpoints.service.js';
-import { CheckpointsRepository } from '#modules/checkpoints/checkpoints.repository.js';
 import { normalizeLocation, buildLocationQuery } from '#shared/utils/location-normalizer.js';
 import { env } from '#config/env.js';
 import { scheduleAutoReject } from '#modules/reports/jobs/report.queue.js';
@@ -24,9 +20,6 @@ const AUTO_REJECT_BELOW = 0.3;
 const CACHE_TTL_LIST = 120;
 const CACHE_TTL_SINGLE = 180;
 const CACHE_VERSION_KEY = 'reports:list:version';
-
-const incidentsService = new IncidentsService(new IncidentsRepository());
-const checkpointsService = new CheckpointsService(new CheckpointsRepository());
 
 const systemUser = () => ({ id: env.SYSTEM_USER_ID });
 
@@ -76,8 +69,21 @@ const _invalidateReportCache = async (reportId) => {
 };
 
 export class ReportsService {
-  constructor(reportsRepository) {
+  /**
+   * @param {import('./reports.repository.js').ReportsRepository} reportsRepository
+   * @param {{
+   *  incidentsService: import('#modules/incidents/incidents.service.js').IncidentsService,
+   *  checkpointsService: import('#modules/checkpoints/checkpoints.service.js').CheckpointsService,
+   * }} deps
+   */
+  constructor(reportsRepository, deps) {
     this.repo = reportsRepository;
+    this.incidentsService = deps.incidentsService;
+    this.checkpointsService = deps.checkpointsService;
+  }
+
+  async getUserStats(userId) {
+    return await this.repo.getUserStats(userId);
   }
 
   _isModerator(userInfo) {
@@ -138,7 +144,7 @@ export class ReportsService {
   }
 
   async _normalizeCheckpointReportInput(body) {
-    const checkpoint = await checkpointsService.getCheckpointById(body.checkpointId);
+    const checkpoint = await this.checkpointsService.getCheckpointById(body.checkpointId);
     if (checkpoint.status === body.proposedCheckpointStatus) {
       throw new BadRequestError(
         'Proposed status matches the current checkpoint status. Choose a different status'
@@ -163,7 +169,7 @@ export class ReportsService {
     if (!report.checkpointId || !report.proposedCheckpointStatus) return;
 
     try {
-      await checkpointsService.updateCheckpointStatus(
+      await this.checkpointsService.updateCheckpointStatus(
         report.checkpointId,
         {
           status: report.proposedCheckpointStatus,
@@ -646,7 +652,7 @@ export class ReportsService {
 
     if (report.incidentId) {
       const actor = moderatorId ? { id: moderatorId } : systemUser();
-      await incidentsService.verifyIncident(
+      await this.incidentsService.verifyIncident(
         report.incidentId,
         actor,
         reason ?? 'Verified via report'
@@ -680,7 +686,7 @@ export class ReportsService {
 
     if (report.incidentId) {
       const actor = moderatorId ? { id: moderatorId } : systemUser();
-      await incidentsService.rejectIncident(report.incidentId, actor);
+      await this.incidentsService.rejectIncident(report.incidentId, actor);
     }
 
     await this.repo.decreaseReportOwnersScore(reportId);
@@ -703,7 +709,7 @@ export class ReportsService {
   }
 
   async _createIncidentFromReport(report) {
-    return incidentsService.createIncident(
+    return this.incidentsService.createIncident(
       { id: report.userId },
       {
         locationLat: report.locationLat,
