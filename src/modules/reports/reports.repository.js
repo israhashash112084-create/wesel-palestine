@@ -91,19 +91,37 @@ export class ReportsRepository {
     });
   }
 
-  async findByIncidentId(incidentId) {
-    return prisma.report.findMany({
-      where: { incidentId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        ...this._reportListSelect(),
-        _count: {
-          select: {
-            votes: true,
+  async findByIncidentId(
+    incidentId,
+    { skip = 0, take = 10, sortBy = 'createdAt', sortOrder = 'desc', status, type } = {}
+  ) {
+    const where = { incidentId };
+
+    if (status) where.status = status;
+    if (type) where.type = type;
+
+    const [reports, total] = await prisma.$transaction([
+      prisma.report.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take,
+        select: {
+          ...this._reportListSelect(),
+          _count: {
+            select: {
+              votes: true,
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.report.count({ where }),
+    ]);
+
+    return {
+      reports,
+      total,
+    };
   }
 
   async findMany({ status, type, area, skip, take, sortBy, sortOrder, includeDuplicates = false }) {

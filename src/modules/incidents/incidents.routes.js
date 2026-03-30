@@ -8,6 +8,7 @@ import {
   incidentIdParamSchema,
   listIncidentsSchema,
   incidentHistoryQuerySchema,
+  incidentReportsQuerySchema,
   nearbyIncidentsSchema,
 } from './incidents.validator.js';
 
@@ -68,6 +69,7 @@ export const createIncidentsRouter = ({ incidentsController }) => {
     authenticate,
     authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     validateRequest(incidentIdParamSchema, 'params'),
+    validateRequest(incidentReportsQuerySchema, 'query'),
     incidentsController.getIncidentReports
   );
 

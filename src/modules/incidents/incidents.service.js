@@ -429,20 +429,45 @@ export class IncidentsService {
     );
   }
 
-  async getIncidentReports(incidentId) {
-    return this._withLogging('getIncidentReports', { incidentId }, async () => {
-      const incident = await this.repo.findById(incidentId);
+  async getIncidentReports(incidentId, filters = {}) {
+    return this._withLogging(
+      'getIncidentReports',
+      {
+        incidentId,
+        page: filters.page,
+        limit: filters.limit,
+        sortBy: filters.sortBy,
+        sortOrder: filters.sortOrder,
+      },
+      async () => {
+        const incident = await this.repo.findById(incidentId);
 
-      if (!incident) {
-        throw new NotFoundError('Incident not found');
+        if (!incident) {
+          throw new NotFoundError('Incident not found');
+        }
+
+        if (!this.reportsService?.getReportsByIncidentId) {
+          throw new InternalServerError('Reports service dependency is not configured');
+        }
+
+        const { page, limit, sortBy, sortOrder, status, type } = filters;
+        const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+
+        const { reports, total } = await this.reportsService.getReportsByIncidentId(incident.id, {
+          skip,
+          take,
+          sortBy,
+          sortOrder,
+          status,
+          type,
+        });
+
+        return {
+          reports,
+          pagination: buildPaginationMeta(total),
+        };
       }
-
-      if (!this.reportsService?.getReportsByIncidentId) {
-        throw new InternalServerError('Reports service dependency is not configured');
-      }
-
-      return this.reportsService.getReportsByIncidentId(incident.id);
-    });
+    );
   }
   async verifyIncident(id, userInfo, notes = 'Verified incident') {
     return this._withLogging(
