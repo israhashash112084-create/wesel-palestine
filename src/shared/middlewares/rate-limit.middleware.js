@@ -108,3 +108,33 @@ export const areaReportLimiter = async (req, _res, next) => {
   await checkAreaReportLimit(req.userInfo.id, req.body.area);
   next();
 };
+
+export const checkAreaIncidentLimit = async (userId, area) => {
+  if (!area || typeof area !== 'string') {
+    return;
+  }
+
+  const normalizedArea = area.trim().toLowerCase();
+  const key = `area_incident_limit:${userId}:${normalizedArea}`;
+
+  const count = await redisClient.incr(key);
+
+  if (count === 1) {
+    await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+  }
+
+  if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
+    const ttl = await redisClient.ttl(key);
+    const hoursLeft = Math.ceil(ttl / 3600);
+
+    throw new ConflictError(
+      `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} incidents for "${area}". ` +
+        `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
+    );
+  }
+};
+
+export const areaIncidentLimiter = async (req, _res, next) => {
+  await checkAreaIncidentLimit(req.userInfo.id, req.body.area);
+  next();
+};
