@@ -91,6 +91,21 @@ export class ReportsRepository {
     });
   }
 
+  async findByIncidentId(incidentId) {
+    return prisma.report.findMany({
+      where: { incidentId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        ...this._reportListSelect(),
+        _count: {
+          select: {
+            votes: true,
+          },
+        },
+      },
+    });
+  }
+
   async findMany({ status, type, area, skip, take, sortBy, sortOrder, includeDuplicates = false }) {
     const where = {};
 

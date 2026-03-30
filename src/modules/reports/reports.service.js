@@ -86,6 +86,10 @@ export class ReportsService {
     return await this.repo.getUserStats(userId);
   }
 
+  async getReportsByIncidentId(incidentId) {
+    return this.repo.findByIncidentId(incidentId);
+  }
+
   _isModerator(userInfo) {
     return userInfo?.role === UserRoles.MODERATOR || userInfo?.role === UserRoles.ADMIN;
   }

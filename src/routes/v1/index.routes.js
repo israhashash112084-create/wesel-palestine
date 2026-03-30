@@ -51,6 +51,8 @@ const reportsService = new ReportsService(reportsRepository, {
 });
 const reportsController = new ReportsController(reportsService);
 
+incidentsService.setReportsService(reportsService);
+
 const routesRepository = new RoutesRepository();
 const routesService = new RoutesService(routesRepository);
 const routesController = new RoutesController(routesService);

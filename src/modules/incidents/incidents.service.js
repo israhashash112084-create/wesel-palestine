@@ -3,6 +3,7 @@ import {
   BadRequestError,
   ConflictError,
   ForbiddenError,
+  InternalServerError,
   NotFoundError,
 } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
@@ -12,9 +13,14 @@ import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
 import { logger } from '#shared/utils/logger.js';
 
 export class IncidentsService {
-  constructor(incidentsRepository, alertsService) {
+  constructor(incidentsRepository, alertsService, deps = {}) {
     this.repo = incidentsRepository;
     this.alertsService = alertsService;
+    this.reportsService = deps.reportsService ?? null;
+  }
+
+  setReportsService(reportsService) {
+    this.reportsService = reportsService;
   }
 
   _formatLog(action, stage, context = {}) {
@@ -431,13 +437,11 @@ export class IncidentsService {
         throw new NotFoundError('Incident not found');
       }
 
-      return [
-        {
-          id: 'report1',
-          incidentId,
-          reportedBy: 'user1',
-        },
-      ];
+      if (!this.reportsService?.getReportsByIncidentId) {
+        throw new InternalServerError('Reports service dependency is not configured');
+      }
+
+      return this.reportsService.getReportsByIncidentId(incident.id);
     });
   }
   async verifyIncident(id, userInfo, notes = 'Verified incident') {
