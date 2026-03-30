@@ -55,6 +55,16 @@ export class IncidentsRepository {
     };
   }
 
+  _nearbyCandidateSelect() {
+    return {
+      id: true,
+      locationLat: true,
+      locationLng: true,
+      severity: true,
+      createdAt: true,
+    };
+  }
+
   _buildWhere({
     type,
     severity,
@@ -189,10 +199,29 @@ export class IncidentsRepository {
 
     const incidents = await prisma.incident.findMany({
       where,
-      select: this._baseSelect(),
+      select: this._nearbyCandidateSelect(),
     });
 
     return incidents;
+  }
+
+  async findByIds(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return [];
+    }
+
+    const incidents = await prisma.incident.findMany({
+      where: {
+        id: {
+          in: ids,
+        },
+      },
+      select: this._baseSelect(),
+    });
+
+    const byId = new Map(incidents.map((incident) => [incident.id, incident]));
+
+    return ids.map((id) => byId.get(id)).filter(Boolean);
   }
 
   async findById(id) {

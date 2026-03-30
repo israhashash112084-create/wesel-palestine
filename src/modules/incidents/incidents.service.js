@@ -430,7 +430,18 @@ export class IncidentsService {
           .filter((incident) => incident.distanceMeters <= searchRadiusMeters);
 
         const sortedIncidents = this._sortNearbyIncidents(strictNearby, { sortBy, sortOrder });
-        const paginatedIncidents = sortedIncidents.slice(skip, skip + take);
+        const paginatedNearby = sortedIncidents.slice(skip, skip + take);
+
+        const paginatedIds = paginatedNearby.map((incident) => incident.id);
+        const paginatedDistanceById = new Map(
+          paginatedNearby.map((incident) => [incident.id, incident.distanceMeters])
+        );
+
+        const hydratedIncidents = await this.repo.findByIds(paginatedIds);
+        const paginatedIncidents = hydratedIncidents.map((incident) => ({
+          ...incident,
+          distanceMeters: paginatedDistanceById.get(incident.id),
+        }));
 
         const response = {
           incidents: paginatedIncidents,
