@@ -11,6 +11,40 @@ import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js'
 import { UserRoles } from '#shared/constants/roles.js';
 import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
 import { logger } from '#shared/utils/logger.js';
+import redisClient from '#shared/utils/radis.js';
+
+const INCIDENTS_LIST_CACHE_TTL_SEC = 120;
+const INCIDENTS_LIST_CACHE_VERSION_KEY = 'incidents:list:version';
+
+const _incidentsCacheKey = {
+  list: (filters, version) => `incidents:list:v${version}:${JSON.stringify(filters)}`,
+};
+
+const _getCache = async (key) => {
+  try {
+    const raw = await redisClient.get(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const _setCache = async (key, value, ttlSeconds) => {
+  try {
+    await redisClient.set(key, JSON.stringify(value), { EX: ttlSeconds });
+  } catch {
+    /* best-effort */
+  }
+};
+
+const _getListCacheVersion = async () => {
+  try {
+    const version = await redisClient.get(INCIDENTS_LIST_CACHE_VERSION_KEY);
+    return version ?? '1';
+  } catch {
+    return '1';
+  }
+};
 
 export class IncidentsService {
   constructor(incidentsRepository, alertsService, deps = {}) {
@@ -188,6 +222,28 @@ export class IncidentsService {
           sortOrder,
         } = filters;
 
+        const normalizedFilters = {
+          type,
+          severity,
+          trafficStatus,
+          checkpointId,
+          reportedBy,
+          fromDate,
+          toDate,
+          page,
+          limit,
+          sortBy,
+          sortOrder,
+        };
+
+        const version = await _getListCacheVersion();
+        const cacheKey = _incidentsCacheKey.list(normalizedFilters, version);
+        const cached = await _getCache(cacheKey);
+
+        if (cached) {
+          return cached;
+        }
+
         const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
         const { incidents, total } = await this.repo.findMany({
@@ -204,10 +260,14 @@ export class IncidentsService {
           sortOrder,
         });
 
-        return {
+        const response = {
           incidents,
           pagination: buildPaginationMeta(total),
         };
+
+        await _setCache(cacheKey, response, INCIDENTS_LIST_CACHE_TTL_SEC);
+
+        return response;
       }
     );
   }
