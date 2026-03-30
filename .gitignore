@@ -3,6 +3,7 @@ node_modules/
 logs/
 *.log
 .env
+.env.production
 .env.local
 .env.*.local
 coverage/
