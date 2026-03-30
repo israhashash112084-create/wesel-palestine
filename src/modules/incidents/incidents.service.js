@@ -1,4 +1,9 @@
-import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
 import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
@@ -290,7 +295,7 @@ export class IncidentsService {
     }
 
     if (existingIncident.status === INCIDENT_STATUSES.CLOSED) {
-      throw new BadRequestError('Incident is already closed');
+      throw new ConflictError('Incident is already closed');
     }
 
     return this.repo.updateWithStatusHistory(id, {
@@ -339,11 +344,15 @@ export class IncidentsService {
     const existingIncident = await this.repo.findById(id);
     if (!existingIncident) throw new NotFoundError('Incident not found');
 
+    if (!userInfo?.id) {
+      throw new ForbiddenError('Authentication required to moderate incident');
+    }
+
     if (existingIncident.status === INCIDENT_STATUSES.CLOSED)
-      throw new BadRequestError('Closed incidents cannot be modified');
+      throw new ConflictError('Closed incidents cannot be modified');
 
     if (existingIncident.status === newStatus)
-      throw new BadRequestError(`Incident is already ${newStatus}`);
+      throw new ConflictError(`Incident is already ${newStatus}`);
 
     const now = new Date();
     const actorId = userInfo?.id ?? null;
