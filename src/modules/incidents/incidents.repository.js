@@ -4,7 +4,7 @@ import {
   getBoundingBoxByRadiusMeters,
 } from '#shared/utils/geo.js';
 import { toCountMap } from '#shared/utils/count-map.js';
-import { INCIDENT_STATUSES } from '#shared/constants/enums.js';
+import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
 
 const DUPLICATE_RADIUS_METERS = 500;
 const GLOBAL_DUPLICATE_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -231,6 +231,75 @@ export class IncidentsRepository {
     });
 
     return incident;
+  }
+
+  async findStalePendingIncidents({ createdBefore, take }) {
+    return prisma.incident.findMany({
+      where: {
+        status: INCIDENT_STATUSES.PENDING,
+        createdAt: {
+          lte: createdBefore,
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+      take,
+      select: {
+        id: true,
+      },
+    });
+  }
+
+  async autoClosePendingWithStatusHistory(id, { changedBy, notes, resolvedAt }) {
+    return prismaTransaction(async (tx) => {
+      const current = await tx.incident.findUnique({
+        where: { id },
+        select: {
+          status: true,
+          trafficStatus: true,
+          resolvedAt: true,
+        },
+      });
+
+      if (!current || current.status !== INCIDENT_STATUSES.PENDING) {
+        return null;
+      }
+
+      const closeAt = resolvedAt ?? new Date();
+
+      const incident = await tx.incident.update({
+        where: { id },
+        data: {
+          status: INCIDENT_STATUSES.CLOSED,
+          trafficStatus: TRAFFIC_STATUSES.CLOSED,
+          resolvedAt: closeAt,
+        },
+        select: this._baseSelect(),
+      });
+
+      await tx.incidentStatusHistory.create({
+        data: {
+          incidentId: id,
+          changedBy,
+          oldStatus: INCIDENT_STATUSES.PENDING,
+          newStatus: INCIDENT_STATUSES.CLOSED,
+          notes,
+          oldValues: {
+            status: current.status,
+            trafficStatus: current.trafficStatus,
+            resolvedAt: current.resolvedAt ?? null,
+          },
+          newValues: {
+            status: INCIDENT_STATUSES.CLOSED,
+            trafficStatus: TRAFFIC_STATUSES.CLOSED,
+            resolvedAt: closeAt,
+          },
+        },
+      });
+
+      return incident;
+    });
   }
 
   async findUserDuplicateIncident({

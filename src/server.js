@@ -2,6 +2,10 @@ import { env } from '#config/env.js';
 import { logger } from '#shared/utils/logger.js';
 import app from '#app.js';
 import { startReportWorker, stopReportWorker } from '#modules/reports/jobs/report.worker.js';
+import {
+  startIncidentWorker,
+  stopIncidentWorker,
+} from '#modules/incidents/jobs/incident.worker.js';
 
 const PORT = env.PORT;
 
@@ -12,12 +16,14 @@ const server = app.listen(PORT, () => {
   logger.debug('This is a test debug log to verify logging functionality');
   logger.http('This is a test http log to verify logging functionality');
   startReportWorker();
+  startIncidentWorker();
 });
 const shutdown = async (signal) => {
   logger.info(`${signal} received — starting graceful shutdown`);
 
   server.close(async () => {
     await stopReportWorker();
+    await stopIncidentWorker();
     logger.info('Shutdown complete');
     process.exit(0);
   });
