@@ -14,10 +14,12 @@ import { logger } from '#shared/utils/logger.js';
 import redisClient from '#shared/utils/radis.js';
 
 const INCIDENTS_LIST_CACHE_TTL_SEC = 120;
+const INCIDENTS_NEARBY_CACHE_TTL_SEC = 120;
 const INCIDENTS_LIST_CACHE_VERSION_KEY = 'incidents:list:version';
 
 const _incidentsCacheKey = {
   list: (filters, version) => `incidents:list:v${version}:${JSON.stringify(filters)}`,
+  nearby: (filters, version) => `incidents:nearby:v${version}:${JSON.stringify(filters)}`,
 };
 
 const _getCache = async (key) => {
@@ -55,6 +57,14 @@ export class IncidentsService {
 
   setReportsService(reportsService) {
     this.reportsService = reportsService;
+  }
+
+  async _invalidateIncidentsQueryCache() {
+    try {
+      await redisClient.incr(INCIDENTS_LIST_CACHE_VERSION_KEY);
+    } catch {
+      /* best-effort */
+    }
   }
 
   _formatLog(action, stage, context = {}) {
@@ -328,6 +338,28 @@ export class IncidentsService {
         const centerLng = Number(lng);
         const searchRadiusMeters = Number(radiusMeters);
 
+        const normalizedFilters = {
+          lat: centerLat,
+          lng: centerLng,
+          radiusMeters: searchRadiusMeters,
+          type,
+          severity,
+          trafficStatus,
+          status,
+          page,
+          limit,
+          sortBy,
+          sortOrder,
+        };
+
+        const version = await _getListCacheVersion();
+        const cacheKey = _incidentsCacheKey.nearby(normalizedFilters, version);
+        const cached = await _getCache(cacheKey);
+
+        if (cached) {
+          return cached;
+        }
+
         const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
         const candidates = await this.repo.findNearbyCandidates({
@@ -358,10 +390,14 @@ export class IncidentsService {
         const sortedIncidents = this._sortNearbyIncidents(strictNearby, { sortBy, sortOrder });
         const paginatedIncidents = sortedIncidents.slice(skip, skip + take);
 
-        return {
+        const response = {
           incidents: paginatedIncidents,
           pagination: buildPaginationMeta(sortedIncidents.length),
         };
+
+        await _setCache(cacheKey, response, INCIDENTS_NEARBY_CACHE_TTL_SEC);
+
+        return response;
       }
     );
   }
@@ -398,6 +434,8 @@ export class IncidentsService {
           })
         );
 
+        await this._invalidateIncidentsQueryCache();
+
         if (this.alertsService) {
           await this.alertsService.handleNewIncident(incident);
         }
@@ -432,6 +470,8 @@ export class IncidentsService {
           })
         );
 
+        await this._invalidateIncidentsQueryCache();
+
         logger.info(
           this._formatLog('createIncident', 'success', {
             incidentId: incident.id,
@@ -463,7 +503,7 @@ export class IncidentsService {
           throw new BadRequestError('No changes detected in update payload');
         }
 
-        return this.repo.updateWithStatusHistory(id, {
+        const incident = await this.repo.updateWithStatusHistory(id, {
           severity: body.severity,
           description: body.description,
           trafficStatus: body.trafficStatus,
@@ -480,6 +520,10 @@ export class IncidentsService {
           oldValues,
           newValues,
         });
+
+        await this._invalidateIncidentsQueryCache();
+
+        return incident;
       }
     );
   }
@@ -510,6 +554,8 @@ export class IncidentsService {
           oldValues: { status: existingIncident.status },
           newValues: { status: INCIDENT_STATUSES.CLOSED },
         });
+
+        await this._invalidateIncidentsQueryCache();
 
         logger.info(
           this._formatLog('closeIncident', 'success', {
@@ -638,7 +684,7 @@ export class IncidentsService {
     const now = new Date();
     const actorId = userInfo?.id ?? null;
 
-    return this.repo.updateWithStatusHistory(id, {
+    const incident = await this.repo.updateWithStatusHistory(id, {
       status: newStatus,
       moderatedAt: now,
       moderatedBy: actorId,
@@ -658,6 +704,10 @@ export class IncidentsService {
         moderatedBy: actorId,
       },
     });
+
+    await this._invalidateIncidentsQueryCache();
+
+    return incident;
   }
 
   async getIncidentHistory(incidentId, filters) {
