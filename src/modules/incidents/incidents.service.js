@@ -756,6 +756,11 @@ export class IncidentsService {
       'getIncidentHistory',
       {
         incidentId,
+        changedBy: filters.changedBy,
+        oldStatus: filters.oldStatus,
+        newStatus: filters.newStatus,
+        fromDate: filters.fromDate,
+        toDate: filters.toDate,
         page: filters.page,
         limit: filters.limit,
       },
@@ -765,10 +770,25 @@ export class IncidentsService {
           throw new NotFoundError('Incident not found');
         }
 
-        const { page, limit, sortBy, sortOrder } = filters;
+        const {
+          changedBy,
+          oldStatus,
+          newStatus,
+          fromDate,
+          toDate,
+          page,
+          limit,
+          sortBy,
+          sortOrder,
+        } = filters;
         const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
         const { history, total } = await this.repo.findStatusHistory(incidentId, {
+          changedBy,
+          oldStatus,
+          newStatus,
+          fromDate,
+          toDate,
           skip,
           take,
           sortBy,

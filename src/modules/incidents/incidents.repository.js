@@ -377,10 +377,28 @@ export class IncidentsRepository {
     return updatedIncident;
   }
 
-  async findStatusHistory(incidentId, { skip, take, sortBy, sortOrder }) {
+  async findStatusHistory(
+    incidentId,
+    { changedBy, oldStatus, newStatus, fromDate, toDate, skip, take, sortBy, sortOrder }
+  ) {
+    const where = {
+      incidentId,
+      ...(changedBy ? { changedBy } : {}),
+      ...(oldStatus ? { oldStatus } : {}),
+      ...(newStatus ? { newStatus } : {}),
+      ...(fromDate || toDate
+        ? {
+            changedAt: {
+              ...(fromDate ? { gte: new Date(fromDate) } : {}),
+              ...(toDate ? { lte: new Date(toDate) } : {}),
+            },
+          }
+        : {}),
+    };
+
     const { records, total } = await prismaTransaction(async (tx) => {
       const records = await tx.incidentStatusHistory.findMany({
-        where: { incidentId },
+        where,
         orderBy: { [sortBy]: sortOrder },
         skip,
         take,
@@ -403,7 +421,7 @@ export class IncidentsRepository {
       });
 
       const total = await tx.incidentStatusHistory.count({
-        where: { incidentId },
+        where,
       });
 
       return { records, total };

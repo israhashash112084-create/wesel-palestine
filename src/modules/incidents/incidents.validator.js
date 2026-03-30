@@ -92,6 +92,17 @@ export const listIncidentsSchema = Joi.object({
 });
 
 export const incidentHistoryQuerySchema = Joi.object({
+  changedBy: positiveIntegerSchema.optional(),
+  oldStatus: Joi.string()
+    .valid(...incidentStatuses)
+    .optional(),
+  newStatus: Joi.string()
+    .valid(...incidentStatuses)
+    .optional(),
+  fromDate: Joi.date().iso().optional(),
+  toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
+    'date.greater': 'toDate must be greater than fromDate',
+  }),
   page: pageQuerySchema,
   limit: limitQuerySchema,
   sortBy: Joi.string().valid('changedAt').default('changedAt'),
