@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '#shared/middlewares/auth.middleware.js';
+import { UserRoles } from '#shared/constants/roles.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import {
   createIncidentSchema,
@@ -16,7 +17,7 @@ export const createIncidentsRouter = ({ incidentsController }) => {
   router.get(
     '/',
     authenticate,
-    authorize('moderator', 'admin'),
+    authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     validateRequest(listIncidentsSchema, 'query'),
     incidentsController.getAllIncidents
   );
@@ -24,7 +25,7 @@ export const createIncidentsRouter = ({ incidentsController }) => {
   router.get(
     '/nearby',
     authenticate,
-    authorize('moderator', 'admin'),
+    authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     validateRequest(nearbyIncidentsSchema, 'query'),
     incidentsController.getNearbyIncidents
   );
@@ -33,14 +34,14 @@ export const createIncidentsRouter = ({ incidentsController }) => {
     '/:id',
     authenticate,
     validateRequest(incidentIdParamSchema, 'params'),
-    authorize('moderator', 'admin'),
+    authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     incidentsController.getIncidentById
   );
 
   router.post(
     '/',
     authenticate,
-    authorize('moderator', 'admin'),
+    authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     validateRequest(createIncidentSchema, 'body'),
     incidentsController.createIncident
   );
@@ -48,7 +49,7 @@ export const createIncidentsRouter = ({ incidentsController }) => {
   router.patch(
     '/:id',
     authenticate,
-    authorize('moderator', 'admin'),
+    authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     validateRequest(incidentIdParamSchema, 'params'),
     validateRequest(updateIncidentBodySchema, 'body'),
     incidentsController.updateIncident
@@ -57,7 +58,7 @@ export const createIncidentsRouter = ({ incidentsController }) => {
   router.patch(
     '/:id/close',
     authenticate,
-    authorize('moderator', 'admin'),
+    authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     validateRequest(incidentIdParamSchema, 'params'),
     incidentsController.closeIncident
   );
@@ -65,7 +66,7 @@ export const createIncidentsRouter = ({ incidentsController }) => {
   router.get(
     '/:id/reports',
     authenticate,
-    authorize('moderator', 'admin'),
+    authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     validateRequest(incidentIdParamSchema, 'params'),
     incidentsController.getIncidentReports
   );
@@ -73,7 +74,7 @@ export const createIncidentsRouter = ({ incidentsController }) => {
   router.get(
     '/:id/history',
     authenticate,
-    authorize('moderator', 'admin'),
+    authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
     validateRequest(incidentIdParamSchema, 'params'),
     validateRequest(incidentHistoryQuerySchema, 'query'),
     incidentsController.getIncidentHistory
