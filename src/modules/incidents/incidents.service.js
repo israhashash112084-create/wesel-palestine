@@ -135,6 +135,35 @@ export class IncidentsService {
     };
   }
 
+  async _ensureNoCreateDuplicate({ actorId, body }) {
+    const baseInput = {
+      locationLat: body.locationLat,
+      locationLng: body.locationLng,
+      type: body.type,
+      severity: body.severity,
+      checkpointId: body.checkpointId,
+    };
+
+    const userDuplicate = await this.repo.findUserDuplicateIncident({
+      ...baseInput,
+      reportedBy: actorId,
+    });
+
+    if (userDuplicate) {
+      throw new ConflictError(
+        `A similar incident already exists for this user (#${userDuplicate.id}) within the duplicate window`
+      );
+    }
+
+    const nearbyDuplicate = await this.repo.findNearbyDuplicateIncident(baseInput);
+
+    if (nearbyDuplicate) {
+      throw new ConflictError(
+        `A similar nearby incident already exists (#${nearbyDuplicate.id}) within the duplicate window`
+      );
+    }
+  }
+
   async getAllIncidents(filters) {
     return this._withLogging(
       'getAllIncidents',
@@ -294,7 +323,10 @@ export class IncidentsService {
       'createVerifiedIncident',
       { actorId: adminInfo?.id, actorRole: adminInfo?.role },
       async () => {
-        // TODO: Implement a more robust duplicate detection mechanism that considers both location and time proximity, as well as incident type and severity.
+        await this._ensureNoCreateDuplicate({
+          actorId: adminInfo.id,
+          body,
+        });
 
         const moderatedAt = new Date();
 
@@ -329,7 +361,11 @@ export class IncidentsService {
       'createIncident',
       { actorId: userInfo?.id, actorRole: userInfo?.role },
       async () => {
-        // TODO: Implement a more robust duplicate detection mechanism
+        await this._ensureNoCreateDuplicate({
+          actorId: userInfo.id,
+          body,
+        });
+
         const incident = await this.repo.create(
           this._buildIncidentCreatePayload(userInfo, body, {
             status: INCIDENT_STATUSES.PENDING,
