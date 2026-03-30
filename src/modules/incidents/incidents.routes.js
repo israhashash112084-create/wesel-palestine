@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '#shared/middlewares/auth.middleware.js';
 import { UserRoles } from '#shared/constants/roles.js';
+import { incidentSubmitLimiter } from '#shared/middlewares/rate-limit.middleware.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import {
   createIncidentSchema,
@@ -43,6 +44,7 @@ export const createIncidentsRouter = ({ incidentsController }) => {
     '/',
     authenticate,
     authorize(UserRoles.MODERATOR, UserRoles.ADMIN),
+    incidentSubmitLimiter,
     validateRequest(createIncidentSchema, 'body'),
     incidentsController.createIncident
   );
