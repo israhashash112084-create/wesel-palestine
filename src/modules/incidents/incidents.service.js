@@ -8,6 +8,7 @@ import {
 } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import {
+  INCIDENT_MUTABLE_FIELDS_BY_STATUS,
   INCIDENT_STATUS_TRANSITIONS,
   INCIDENT_STATUSES,
   TRAFFIC_STATUSES,
@@ -20,6 +21,17 @@ import redisClient from '#shared/utils/radis.js';
 const INCIDENTS_LIST_CACHE_TTL_SEC = 120;
 const INCIDENTS_NEARBY_CACHE_TTL_SEC = 120;
 const INCIDENTS_LIST_CACHE_VERSION_KEY = 'incidents:list:version';
+const INCIDENT_UPDATABLE_FIELDS = [
+  'severity',
+  'description',
+  'trafficStatus',
+  'locationLat',
+  'locationLng',
+  'area',
+  'road',
+  'city',
+  'type',
+];
 
 const _incidentsCacheKey = {
   list: (filters, version) => `incidents:list:v${version}:${JSON.stringify(filters)}`,
@@ -134,22 +146,10 @@ export class IncidentsService {
   }
 
   _buildAuditDiff(existingIncident, body) {
-    const updatableFields = [
-      'severity',
-      'description',
-      'trafficStatus',
-      'locationLat',
-      'locationLng',
-      'area',
-      'road',
-      'city',
-      'type',
-    ];
-
     const oldValues = {};
     const newValues = {};
 
-    for (const field of updatableFields) {
+    for (const field of INCIDENT_UPDATABLE_FIELDS) {
       if (body[field] === undefined) {
         continue;
       }
@@ -181,6 +181,23 @@ export class IncidentsService {
       trafficStatus: body.trafficStatus,
       ...overrides,
     };
+  }
+
+  _extractRequestedUpdatableFields(body) {
+    return INCIDENT_UPDATABLE_FIELDS.filter((field) => body[field] !== undefined);
+  }
+
+  _assertMutableFieldsByStatus(status, requestedFields) {
+    const mutableFields = INCIDENT_MUTABLE_FIELDS_BY_STATUS[status] ?? [];
+    const immutableRequestedFields = requestedFields.filter(
+      (field) => !mutableFields.includes(field)
+    );
+
+    if (immutableRequestedFields.length > 0) {
+      throw new ConflictError(
+        `Cannot update fields [${immutableRequestedFields.join(', ')}] when incident status is ${status}`
+      );
+    }
   }
 
   _isTransitionAllowed(currentStatus, nextStatus) {
@@ -521,6 +538,9 @@ export class IncidentsService {
         if (!existingIncident) {
           throw new NotFoundError('Incident not found');
         }
+
+        const requestedFields = this._extractRequestedUpdatableFields(body);
+        this._assertMutableFieldsByStatus(existingIncident.status, requestedFields);
 
         const { oldValues, newValues } = this._buildAuditDiff(existingIncident, body);
 
