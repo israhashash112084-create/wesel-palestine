@@ -1,4 +1,5 @@
 import {
+  AppError,
   BadRequestError,
   ConflictError,
   ForbiddenError,
@@ -6,7 +7,9 @@ import {
 } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
+import { UserRoles } from '#shared/constants/roles.js';
 import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
+import { logger } from '#shared/utils/logger.js';
 
 export class IncidentsService {
   constructor(incidentsRepository, alertsService) {
@@ -14,25 +17,54 @@ export class IncidentsService {
     this.alertsService = alertsService;
   }
 
-  async getUserStats(userId, role) {
-    const baseStats = await this.repo.getUserReportedStats(userId);
+  _formatLog(action, stage, context = {}) {
+    return `[incidents.service] ${action} ${stage} ${JSON.stringify(context)}`;
+  }
 
-    if (role !== 'moderator' && role !== 'admin') {
-      return baseStats;
+  async _withLogging(action, context, operation) {
+    try {
+      return await operation();
+    } catch (error) {
+      const failureContext = {
+        ...context,
+        error: error.message,
+        statusCode: error?.statusCode,
+      };
+
+      // Expected operational conflicts are informative, not system failures.
+      if (error instanceof ConflictError) {
+        logger.info(this._formatLog(action, 'failure', failureContext));
+      } else if (error instanceof AppError && error.statusCode >= 400 && error.statusCode < 500) {
+        logger.warn(this._formatLog(action, 'failure', failureContext));
+      } else {
+        logger.error(this._formatLog(action, 'failure', failureContext));
+      }
+
+      throw error;
     }
+  }
 
-    const moderationStats = await this.repo.getUserModerationStats(userId);
+  async getUserStats(userId, role) {
+    return this._withLogging('getUserStats', { userId, role }, async () => {
+      const baseStats = await this.repo.getUserReportedStats(userId);
 
-    return {
-      counts: {
-        ...baseStats.counts,
-        ...moderationStats.counts,
-      },
-      breakdowns: {
-        ...baseStats.breakdowns,
-        ...moderationStats.breakdowns,
-      },
-    };
+      if (role !== UserRoles.MODERATOR && role !== UserRoles.ADMIN) {
+        return baseStats;
+      }
+
+      const moderationStats = await this.repo.getUserModerationStats(userId);
+
+      return {
+        counts: {
+          ...baseStats.counts,
+          ...moderationStats.counts,
+        },
+        breakdowns: {
+          ...baseStats.breakdowns,
+          ...moderationStats.breakdowns,
+        },
+      };
+    });
   }
 
   _toComparableValue(value) {
@@ -98,40 +130,51 @@ export class IncidentsService {
   }
 
   async getAllIncidents(filters) {
-    const {
-      type,
-      severity,
-      trafficStatus,
-      checkpointId,
-      reportedBy,
-      fromDate,
-      toDate,
-      page,
-      limit,
-      sortBy,
-      sortOrder,
-    } = filters;
+    return this._withLogging(
+      'getAllIncidents',
+      {
+        page: filters.page,
+        limit: filters.limit,
+        sortBy: filters.sortBy,
+        sortOrder: filters.sortOrder,
+      },
+      async () => {
+        const {
+          type,
+          severity,
+          trafficStatus,
+          checkpointId,
+          reportedBy,
+          fromDate,
+          toDate,
+          page,
+          limit,
+          sortBy,
+          sortOrder,
+        } = filters;
 
-    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+        const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
-    const { incidents, total } = await this.repo.findMany({
-      type,
-      severity,
-      trafficStatus,
-      checkpointId,
-      reportedBy,
-      fromDate,
-      toDate,
-      skip,
-      take,
-      sortBy,
-      sortOrder,
-    });
+        const { incidents, total } = await this.repo.findMany({
+          type,
+          severity,
+          trafficStatus,
+          checkpointId,
+          reportedBy,
+          fromDate,
+          toDate,
+          skip,
+          take,
+          sortBy,
+          sortOrder,
+        });
 
-    return {
-      incidents,
-      pagination: buildPaginationMeta(total),
-    };
+        return {
+          incidents,
+          pagination: buildPaginationMeta(total),
+        };
+      }
+    );
   }
 
   _severityRank(severity) {
@@ -162,182 +205,295 @@ export class IncidentsService {
   }
 
   async getNearbyIncidents(filters) {
-    const {
-      lat,
-      lng,
-      radiusMeters = 500,
-      type,
-      severity,
-      trafficStatus,
-      status,
-      page,
-      limit,
-      sortBy,
-      sortOrder,
-    } = filters;
+    return this._withLogging(
+      'getNearbyIncidents',
+      {
+        lat: filters.lat,
+        lng: filters.lng,
+        radiusMeters: filters.radiusMeters ?? 500,
+        page: filters.page,
+        limit: filters.limit,
+      },
+      async () => {
+        const {
+          lat,
+          lng,
+          radiusMeters = 500,
+          type,
+          severity,
+          trafficStatus,
+          status,
+          page,
+          limit,
+          sortBy,
+          sortOrder,
+        } = filters;
 
-    const centerLat = Number(lat);
-    const centerLng = Number(lng);
-    const searchRadiusMeters = Number(radiusMeters);
+        const centerLat = Number(lat);
+        const centerLng = Number(lng);
+        const searchRadiusMeters = Number(radiusMeters);
 
-    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+        const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
-    const candidates = await this.repo.findNearbyCandidates({
-      lat: centerLat,
-      lng: centerLng,
-      radiusMeters: searchRadiusMeters,
-      type,
-      severity,
-      trafficStatus,
-      status,
-    });
+        const candidates = await this.repo.findNearbyCandidates({
+          lat: centerLat,
+          lng: centerLng,
+          radiusMeters: searchRadiusMeters,
+          type,
+          severity,
+          trafficStatus,
+          status,
+        });
 
-    const strictNearby = candidates
-      .map((incident) => {
-        const incidentLat = Number(incident.locationLat);
-        const incidentLng = Number(incident.locationLng);
-        const distanceMeters = kilometersToMeters(
-          distanceBetween(centerLat, centerLng, incidentLat, incidentLng)
-        );
+        const strictNearby = candidates
+          .map((incident) => {
+            const incidentLat = Number(incident.locationLat);
+            const incidentLng = Number(incident.locationLng);
+            const distanceMeters = kilometersToMeters(
+              distanceBetween(centerLat, centerLng, incidentLat, incidentLng)
+            );
+
+            return {
+              ...incident,
+              distanceMeters: Math.round(distanceMeters),
+            };
+          })
+          .filter((incident) => incident.distanceMeters <= searchRadiusMeters);
+
+        const sortedIncidents = this._sortNearbyIncidents(strictNearby, { sortBy, sortOrder });
+        const paginatedIncidents = sortedIncidents.slice(skip, skip + take);
 
         return {
-          ...incident,
-          distanceMeters: Math.round(distanceMeters),
+          incidents: paginatedIncidents,
+          pagination: buildPaginationMeta(sortedIncidents.length),
         };
-      })
-      .filter((incident) => incident.distanceMeters <= searchRadiusMeters);
-
-    const sortedIncidents = this._sortNearbyIncidents(strictNearby, { sortBy, sortOrder });
-    const paginatedIncidents = sortedIncidents.slice(skip, skip + take);
-
-    return {
-      incidents: paginatedIncidents,
-      pagination: buildPaginationMeta(sortedIncidents.length),
-    };
+      }
+    );
   }
 
   async getIncidentById(id) {
-    const incident = await this.repo.findById(id);
+    return this._withLogging('getIncidentById', { incidentId: id }, async () => {
+      const incident = await this.repo.findById(id);
 
-    if (!incident) {
-      throw new NotFoundError('Incident not found');
-    }
+      if (!incident) {
+        throw new NotFoundError('Incident not found');
+      }
 
-    return incident;
+      return incident;
+    });
   }
 
   async createVerifiedIncident(adminInfo, body) {
-    // TODO: Implement a more robust duplicate detection mechanism that considers both location and time proximity, as well as incident type and severity.
+    return this._withLogging(
+      'createVerifiedIncident',
+      { actorId: adminInfo?.id, actorRole: adminInfo?.role },
+      async () => {
+        // TODO: Implement a more robust duplicate detection mechanism that considers both location and time proximity, as well as incident type and severity.
 
-    const moderatedAt = new Date();
+        const moderatedAt = new Date();
 
-    const incident = await this.repo.create(
-      this._buildIncidentCreatePayload(adminInfo, body, {
-        status: INCIDENT_STATUSES.VERIFIED, // Automatically mark as verified when created by a moderator/admin
-        moderatedAt,
-        moderatedBy: adminInfo.id,
-      })
+        const incident = await this.repo.create(
+          this._buildIncidentCreatePayload(adminInfo, body, {
+            status: INCIDENT_STATUSES.VERIFIED, // Automatically mark as verified when created by a moderator/admin
+            moderatedAt,
+            moderatedBy: adminInfo.id,
+          })
+        );
+
+        if (this.alertsService) {
+          await this.alertsService.handleNewIncident(incident);
+        }
+
+        logger.info(
+          this._formatLog('createVerifiedIncident', 'success', {
+            incidentId: incident.id,
+            actorId: adminInfo?.id,
+            actorRole: adminInfo?.role,
+            status: incident.status,
+          })
+        );
+
+        return incident;
+      }
     );
-
-    if (this.alertsService) {
-      await this.alertsService.handleNewIncident(incident);
-    }
-
-    return incident;
   }
 
   async createIncident(userInfo, body) {
-    // TODO: Implement a more robust duplicate detection mechanism
-    return await this.repo.create(
-      this._buildIncidentCreatePayload(userInfo, body, {
-        status: INCIDENT_STATUSES.PENDING,
-      })
+    return this._withLogging(
+      'createIncident',
+      { actorId: userInfo?.id, actorRole: userInfo?.role },
+      async () => {
+        // TODO: Implement a more robust duplicate detection mechanism
+        const incident = await this.repo.create(
+          this._buildIncidentCreatePayload(userInfo, body, {
+            status: INCIDENT_STATUSES.PENDING,
+          })
+        );
+
+        logger.info(
+          this._formatLog('createIncident', 'success', {
+            incidentId: incident.id,
+            actorId: userInfo?.id,
+            actorRole: userInfo?.role,
+            status: incident.status,
+          })
+        );
+
+        return incident;
+      }
     );
   }
 
   async updateIncident(id, body, userInfo) {
-    const existingIncident = await this.repo.findById(id);
+    return this._withLogging(
+      'updateIncident',
+      { incidentId: id, actorId: userInfo?.id, actorRole: userInfo?.role },
+      async () => {
+        const existingIncident = await this.repo.findById(id);
 
-    if (!existingIncident) {
-      throw new NotFoundError('Incident not found');
-    }
+        if (!existingIncident) {
+          throw new NotFoundError('Incident not found');
+        }
 
-    const { oldValues, newValues } = this._buildAuditDiff(existingIncident, body);
+        const { oldValues, newValues } = this._buildAuditDiff(existingIncident, body);
 
-    if (Object.keys(newValues).length === 0) {
-      throw new BadRequestError('No changes detected in update payload');
-    }
+        if (Object.keys(newValues).length === 0) {
+          throw new BadRequestError('No changes detected in update payload');
+        }
 
-    return this.repo.updateWithStatusHistory(id, {
-      severity: body.severity,
-      description: body.description,
-      trafficStatus: body.trafficStatus,
-      locationLat: body.locationLat,
-      locationLng: body.locationLng,
-      area: body.area,
-      road: body.road,
-      city: body.city,
-      type: body.type,
-      oldStatus: existingIncident.status,
-      newStatus: existingIncident.status,
-      changedBy: userInfo.id,
-      notes: body.notes,
-      oldValues,
-      newValues,
-    });
+        return this.repo.updateWithStatusHistory(id, {
+          severity: body.severity,
+          description: body.description,
+          trafficStatus: body.trafficStatus,
+          locationLat: body.locationLat,
+          locationLng: body.locationLng,
+          area: body.area,
+          road: body.road,
+          city: body.city,
+          type: body.type,
+          oldStatus: existingIncident.status,
+          newStatus: existingIncident.status,
+          changedBy: userInfo.id,
+          notes: body.notes,
+          oldValues,
+          newValues,
+        });
+      }
+    );
   }
 
   async closeIncident(id, userInfo) {
-    const existingIncident = await this.repo.findById(id);
+    return this._withLogging(
+      'closeIncident',
+      { incidentId: id, actorId: userInfo?.id, actorRole: userInfo?.role },
+      async () => {
+        const existingIncident = await this.repo.findById(id);
 
-    if (!existingIncident) {
-      throw new NotFoundError('Incident not found');
-    }
+        if (!existingIncident) {
+          throw new NotFoundError('Incident not found');
+        }
 
-    if (existingIncident.status === INCIDENT_STATUSES.CLOSED) {
-      throw new ConflictError('Incident is already closed');
-    }
+        if (existingIncident.status === INCIDENT_STATUSES.CLOSED) {
+          throw new ConflictError('Incident is already closed');
+        }
 
-    return this.repo.updateWithStatusHistory(id, {
-      status: INCIDENT_STATUSES.CLOSED,
-      trafficStatus: TRAFFIC_STATUSES.CLOSED,
-      resolvedAt: new Date(),
-      oldStatus: existingIncident.status,
-      newStatus: INCIDENT_STATUSES.CLOSED,
-      changedBy: userInfo.id,
-      notes: 'Closed incident',
-      oldValues: { status: existingIncident.status },
-      newValues: { status: INCIDENT_STATUSES.CLOSED },
-    });
+        const incident = await this.repo.updateWithStatusHistory(id, {
+          status: INCIDENT_STATUSES.CLOSED,
+          trafficStatus: TRAFFIC_STATUSES.CLOSED,
+          resolvedAt: new Date(),
+          oldStatus: existingIncident.status,
+          newStatus: INCIDENT_STATUSES.CLOSED,
+          changedBy: userInfo.id,
+          notes: 'Closed incident',
+          oldValues: { status: existingIncident.status },
+          newValues: { status: INCIDENT_STATUSES.CLOSED },
+        });
+
+        logger.info(
+          this._formatLog('closeIncident', 'success', {
+            incidentId: incident.id,
+            actorId: userInfo?.id,
+            actorRole: userInfo?.role,
+            status: incident.status,
+          })
+        );
+
+        return incident;
+      }
+    );
   }
 
   async getIncidentReports(incidentId) {
-    const incident = await this.repo.findById(incidentId);
+    return this._withLogging('getIncidentReports', { incidentId }, async () => {
+      const incident = await this.repo.findById(incidentId);
 
-    if (!incident) {
-      throw new NotFoundError('Incident not found');
-    }
+      if (!incident) {
+        throw new NotFoundError('Incident not found');
+      }
 
-    return [
-      {
-        id: 'report1',
-        incidentId,
-        reportedBy: 'user1',
-      },
-    ];
+      return [
+        {
+          id: 'report1',
+          incidentId,
+          reportedBy: 'user1',
+        },
+      ];
+    });
   }
   async verifyIncident(id, userInfo, notes = 'Verified incident') {
-    const incident = await this._moderateIncident(id, INCIDENT_STATUSES.VERIFIED, userInfo, notes);
+    return this._withLogging(
+      'verifyIncident',
+      { incidentId: id, actorId: userInfo?.id, actorRole: userInfo?.role },
+      async () => {
+        const incident = await this._moderateIncident(
+          id,
+          INCIDENT_STATUSES.VERIFIED,
+          userInfo,
+          notes
+        );
 
-    if (this.alertsService) {
-      await this.alertsService.handleNewIncident(incident);
-    }
+        if (this.alertsService) {
+          await this.alertsService.handleNewIncident(incident);
+        }
 
-    return incident;
+        logger.info(
+          this._formatLog('verifyIncident', 'success', {
+            incidentId: incident.id,
+            actorId: userInfo?.id,
+            actorRole: userInfo?.role,
+            status: incident.status,
+          })
+        );
+
+        return incident;
+      }
+    );
   }
 
   async rejectIncident(id, userInfo, notes = 'Reject incident') {
-    return this._moderateIncident(id, INCIDENT_STATUSES.REJECTED, userInfo, notes);
+    return this._withLogging(
+      'rejectIncident',
+      { incidentId: id, actorId: userInfo?.id, actorRole: userInfo?.role },
+      async () => {
+        const incident = await this._moderateIncident(
+          id,
+          INCIDENT_STATUSES.REJECTED,
+          userInfo,
+          notes
+        );
+
+        logger.info(
+          this._formatLog('rejectIncident', 'success', {
+            incidentId: incident.id,
+            actorId: userInfo?.id,
+            actorRole: userInfo?.role,
+            status: incident.status,
+          })
+        );
+
+        return incident;
+      }
+    );
   }
 
   async _moderateIncident(id, newStatus, userInfo, notes) {
@@ -380,25 +536,35 @@ export class IncidentsService {
   }
 
   async getIncidentHistory(incidentId, filters) {
-    const incident = await this.repo.findById(incidentId);
-    if (!incident) {
-      throw new NotFoundError('Incident not found');
-    }
+    return this._withLogging(
+      'getIncidentHistory',
+      {
+        incidentId,
+        page: filters.page,
+        limit: filters.limit,
+      },
+      async () => {
+        const incident = await this.repo.findById(incidentId);
+        if (!incident) {
+          throw new NotFoundError('Incident not found');
+        }
 
-    const { page, limit, sortBy, sortOrder } = filters;
-    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+        const { page, limit, sortBy, sortOrder } = filters;
+        const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
-    const { history, total } = await this.repo.findStatusHistory(incidentId, {
-      skip,
-      take,
-      sortBy,
-      sortOrder,
-    });
+        const { history, total } = await this.repo.findStatusHistory(incidentId, {
+          skip,
+          take,
+          sortBy,
+          sortOrder,
+        });
 
-    return {
-      incidentId: Number(incidentId),
-      history,
-      pagination: buildPaginationMeta(total),
-    };
+        return {
+          incidentId: Number(incidentId),
+          history,
+          pagination: buildPaginationMeta(total),
+        };
+      }
+    );
   }
 }
