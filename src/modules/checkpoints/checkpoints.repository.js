@@ -1,4 +1,4 @@
-import { prisma, prismaTransaction } from '#database/db.js';
+import { prisma, prismaTransaction, query } from '#database/db.js';
 import {
   distanceBetween,
   findNearestCandidateWithinRadiusMeters,
@@ -298,6 +298,119 @@ export class CheckpointsRepository {
     });
   }
 
+  _normalizeNearbyCheckpointRow(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      area: row.area,
+      road: row.road,
+      city: row.city,
+      description: row.description,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      distanceMeters: Number(row.distance_meters),
+    };
+  }
+
+  async _findNearbyDistanceFirst({
+    originLat,
+    originLng,
+    minLat,
+    maxLat,
+    minLng,
+    maxLng,
+    status,
+    radiusMeters,
+    skip,
+    take,
+    sortOrder,
+  }) {
+    const distanceOrder = sortOrder === 'desc' ? 'DESC' : 'ASC';
+    const idOrder = sortOrder === 'desc' ? 'DESC' : 'ASC';
+
+    const distanceExpression = `
+      6371000 * 2 * ASIN(
+        SQRT(
+          POWER(SIN(RADIANS(($1 - c.latitude::double precision) / 2)), 2)
+          + COS(RADIANS($1)) * COS(RADIANS(c.latitude::double precision))
+          * POWER(SIN(RADIANS(($2 - c.longitude::double precision) / 2)), 2)
+        )
+      )
+    `;
+
+    const params = [
+      originLat,
+      originLng,
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+      status ?? null,
+      radiusMeters,
+      skip,
+      take,
+    ];
+
+    const checkpointsSql = `
+      WITH candidates AS (
+        SELECT
+          c.id,
+          c.name,
+          c.area,
+          c.road,
+          c.city,
+          c.description,
+          c.latitude,
+          c.longitude,
+          c.status,
+          c.created_at,
+          c.updated_at,
+          ${distanceExpression} AS distance_meters
+        FROM checkpoints c
+        WHERE c.latitude BETWEEN $3 AND $4
+          AND c.longitude BETWEEN $5 AND $6
+          AND ($7::text IS NULL OR c.status::text = $7)
+      )
+      SELECT *
+      FROM candidates
+      WHERE distance_meters <= $8
+      ORDER BY distance_meters ${distanceOrder}, id ${idOrder}
+      OFFSET $9
+      LIMIT $10
+    `;
+
+    const totalSql = `
+      WITH candidates AS (
+        SELECT ${distanceExpression} AS distance_meters
+        FROM checkpoints c
+        WHERE c.latitude BETWEEN $3 AND $4
+          AND c.longitude BETWEEN $5 AND $6
+          AND ($7::text IS NULL OR c.status::text = $7)
+      )
+      SELECT COUNT(*)::int AS total
+      FROM candidates
+      WHERE distance_meters <= $8
+    `;
+
+    const [checkpointsResult, totalResult] = await Promise.all([
+      query(checkpointsSql, params),
+      query(totalSql, params.slice(0, 8)),
+    ]);
+
+    const checkpoints = checkpointsResult.rows.map((row) =>
+      this._normalizeNearbyCheckpointRow(row)
+    );
+    const total = totalResult.rows[0]?.total ?? 0;
+
+    return {
+      checkpoints,
+      total: Number(total),
+    };
+  }
+
   async findMany({
     status,
     search,
@@ -365,6 +478,22 @@ export class CheckpointsRepository {
       },
       ...(status ? { status } : {}),
     };
+
+    if (sortBy === 'distance') {
+      return this._findNearbyDistanceFirst({
+        originLat,
+        originLng,
+        minLat,
+        maxLat,
+        minLng,
+        maxLng,
+        status,
+        radiusMeters,
+        skip,
+        take,
+        sortOrder,
+      });
+    }
 
     const candidates = await prisma.checkpoint.findMany({
       where,
