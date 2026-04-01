@@ -93,9 +93,11 @@ export const updateCheckpointSchema = Joi.object({
   notes: Joi.string().max(500).optional(),
 })
   .and('latitude', 'longitude')
+  .with('notes', 'status')
   .min(1)
   .messages({
     'object.and': 'latitude and longitude must be provided together',
+    'object.with': 'notes can only be provided when status is included in the payload',
     'object.min': 'At least one field must be provided for update',
   });
 

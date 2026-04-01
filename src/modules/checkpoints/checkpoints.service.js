@@ -411,6 +411,10 @@ export class CheckpointsService {
           throw new NotFoundError(`Checkpoint with id ${id}`);
         }
 
+        if (body.notes !== undefined && body.status === undefined) {
+          throw new BadRequestError('notes can only be provided when status is included');
+        }
+
         let targetLatitude;
         let targetLongitude;
 
