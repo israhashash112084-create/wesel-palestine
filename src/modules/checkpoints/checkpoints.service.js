@@ -14,6 +14,11 @@ const CACHE_TTL_LIST = 120;
 const CACHE_TTL_SINGLE = 180;
 const CACHE_TTL_NEARBY = 120;
 const CACHE_VERSION_KEY = 'checkpoints:list:version';
+const CHECKPOINT_REPO_ERROR_CODES = {
+  NOT_FOUND: 'CHECKPOINT_REPO_NOT_FOUND',
+  CONCURRENT_STATUS_CONFLICT: 'CHECKPOINT_REPO_CONCURRENT_STATUS_CONFLICT',
+  DUPLICATE_LOCATION_CONFLICT: 'CHECKPOINT_REPO_DUPLICATE_LOCATION_CONFLICT',
+};
 const CHECKPOINT_AUDIT_DIFF_FIELDS = [
   'name',
   'area',
@@ -145,6 +150,28 @@ export class CheckpointsService {
 
   _isCheckpointRecordNotFoundError(error) {
     return isPrismaRecordNotFoundError(error);
+  }
+
+  _isCheckpointRepoNotFoundError(error) {
+    return error?.code === CHECKPOINT_REPO_ERROR_CODES.NOT_FOUND;
+  }
+
+  _isCheckpointConcurrentStatusConflictError(error) {
+    return error?.code === CHECKPOINT_REPO_ERROR_CODES.CONCURRENT_STATUS_CONFLICT;
+  }
+
+  _isCheckpointDuplicateLocationConflictError(error) {
+    return error?.code === CHECKPOINT_REPO_ERROR_CODES.DUPLICATE_LOCATION_CONFLICT;
+  }
+
+  async _throwDuplicateCheckpointConflictFromError(error, latitude, longitude, excludeId) {
+    const conflictingCheckpoint = error?.conflictingCheckpoint;
+
+    if (conflictingCheckpoint) {
+      throw new ConflictError(this._buildDuplicateCheckpointConflictMessage(conflictingCheckpoint));
+    }
+
+    await this._throwDuplicateCheckpointConflict(latitude, longitude, excludeId);
   }
 
   async _throwDuplicateCheckpointConflict(latitude, longitude, excludeId) {
@@ -318,14 +345,22 @@ export class CheckpointsService {
                 status: status ?? CHECKPOINT_STATUSES.OPEN,
               },
             },
+            duplicateGuard: {
+              latitude,
+              longitude,
+              radiusMeters: this.duplicateRadiusMeters,
+            },
           });
 
           await _invalidateCheckpointCache(createdCheckpoint.id);
 
           return createdCheckpoint;
         } catch (error) {
-          if (this._isCheckpointLocationUniqueConstraintError(error)) {
-            await this._throwDuplicateCheckpointConflict(latitude, longitude);
+          if (
+            this._isCheckpointLocationUniqueConstraintError(error) ||
+            this._isCheckpointDuplicateLocationConflictError(error)
+          ) {
+            await this._throwDuplicateCheckpointConflictFromError(error, latitude, longitude);
           }
 
           throw error;
@@ -356,12 +391,14 @@ export class CheckpointsService {
   }
 
   async updateCheckpoint(id, body, adminInfo) {
+    const hasLocationUpdate = body.latitude !== undefined || body.longitude !== undefined;
+
     return this._withLogging(
       'updateCheckpoint',
       {
         checkpointId: id,
         adminId: adminInfo.id,
-        hasLocationUpdate: body.latitude !== undefined || body.longitude !== undefined,
+        hasLocationUpdate,
         hasStatusUpdate: body.status !== undefined,
       },
       async () => {
@@ -374,7 +411,7 @@ export class CheckpointsService {
         let targetLatitude;
         let targetLongitude;
 
-        if (body.latitude !== undefined || body.longitude !== undefined) {
+        if (hasLocationUpdate) {
           targetLatitude = body.latitude ?? this._toComparableValue(existingCheckpoint.latitude);
           targetLongitude = body.longitude ?? this._toComparableValue(existingCheckpoint.longitude);
 
@@ -435,6 +472,16 @@ export class CheckpointsService {
               newValues,
             },
             statusHistory,
+            expectedCurrentStatus: statusHistory ? existingCheckpoint.status : undefined,
+            duplicateGuard:
+              targetLatitude !== undefined && targetLongitude !== undefined
+                ? {
+                    latitude: targetLatitude,
+                    longitude: targetLongitude,
+                    radiusMeters: this.duplicateRadiusMeters,
+                    excludeId: id,
+                  }
+                : undefined,
           });
 
           await _invalidateCheckpointCache(id);
@@ -442,14 +489,27 @@ export class CheckpointsService {
           return updatedCheckpoint;
         } catch (error) {
           if (
-            (body.latitude !== undefined || body.longitude !== undefined) &&
-            this._isCheckpointLocationUniqueConstraintError(error)
+            hasLocationUpdate &&
+            (this._isCheckpointLocationUniqueConstraintError(error) ||
+              this._isCheckpointDuplicateLocationConflictError(error))
           ) {
-            await this._throwDuplicateCheckpointConflict(targetLatitude, targetLongitude, id);
+            await this._throwDuplicateCheckpointConflictFromError(
+              error,
+              targetLatitude,
+              targetLongitude,
+              id
+            );
           }
 
-          if (this._isCheckpointRecordNotFoundError(error)) {
+          if (
+            this._isCheckpointRecordNotFoundError(error) ||
+            this._isCheckpointRepoNotFoundError(error)
+          ) {
             throw new NotFoundError(`Checkpoint with id ${id}`);
+          }
+
+          if (this._isCheckpointConcurrentStatusConflictError(error)) {
+            throw new ConflictError('Checkpoint status changed during update. Please retry.');
           }
 
           throw error;
@@ -494,10 +554,18 @@ export class CheckpointsService {
               newStatus: body.status,
               notes: body.notes,
             },
+            expectedCurrentStatus: existingCheckpoint.status,
           });
         } catch (error) {
-          if (this._isCheckpointRecordNotFoundError(error)) {
+          if (
+            this._isCheckpointRecordNotFoundError(error) ||
+            this._isCheckpointRepoNotFoundError(error)
+          ) {
             throw new NotFoundError(`Checkpoint with id ${id}`);
+          }
+
+          if (this._isCheckpointConcurrentStatusConflictError(error)) {
+            throw new ConflictError('Checkpoint status changed during update. Please retry.');
           }
 
           throw error;

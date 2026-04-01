@@ -6,6 +6,19 @@ import {
   kilometersToMeters,
 } from '#shared/utils/geo.js';
 
+const CHECKPOINT_REPO_ERROR_CODES = {
+  NOT_FOUND: 'CHECKPOINT_REPO_NOT_FOUND',
+  CONCURRENT_STATUS_CONFLICT: 'CHECKPOINT_REPO_CONCURRENT_STATUS_CONFLICT',
+  DUPLICATE_LOCATION_CONFLICT: 'CHECKPOINT_REPO_DUPLICATE_LOCATION_CONFLICT',
+};
+
+const buildRepoError = (code, message, details = {}) => {
+  const error = new Error(message);
+  error.code = code;
+  Object.assign(error, details);
+  return error;
+};
+
 export class CheckpointsRepository {
   _baseSelect() {
     return {
@@ -84,6 +97,117 @@ export class CheckpointsRepository {
     }
 
     return where;
+  }
+
+  _buildLocationLockKeys(latitude, longitude) {
+    const latBucket = Math.round(Number(latitude) * 1000);
+    const lngBucket = Math.round(Number(longitude) * 1000);
+    const keys = [];
+
+    for (let latOffset = -1; latOffset <= 1; latOffset += 1) {
+      for (let lngOffset = -1; lngOffset <= 1; lngOffset += 1) {
+        keys.push([latBucket + latOffset, lngBucket + lngOffset]);
+      }
+    }
+
+    return keys.sort((left, right) => {
+      if (left[0] !== right[0]) {
+        return left[0] - right[0];
+      }
+
+      return left[1] - right[1];
+    });
+  }
+
+  async _acquireLocationAdvisoryLocks(tx, latitude, longitude) {
+    const lockKeys = this._buildLocationLockKeys(latitude, longitude);
+
+    for (const [key1, key2] of lockKeys) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${key1}, ${key2})`;
+    }
+  }
+
+  async _findNearestByLocationWithinRadiusWithClient(
+    dbClient,
+    latitude,
+    longitude,
+    radiusMeters,
+    excludeId
+  ) {
+    const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(
+      Number(latitude),
+      Number(longitude),
+      radiusMeters
+    );
+
+    const where = {
+      latitude: {
+        gte: minLat,
+        lte: maxLat,
+      },
+      longitude: {
+        gte: minLng,
+        lte: maxLng,
+      },
+      ...(excludeId !== undefined &&
+        excludeId !== null && {
+          id: {
+            not: excludeId,
+          },
+        }),
+    };
+
+    const candidateCheckpoints = await dbClient.checkpoint.findMany({
+      where,
+      select: {
+        id: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+
+    const nearest = findNearestCandidateWithinRadiusMeters({
+      originLat: Number(latitude),
+      originLng: Number(longitude),
+      candidates: candidateCheckpoints,
+      radiusMeters,
+      getLat: (candidate) => candidate.latitude,
+      getLng: (candidate) => candidate.longitude,
+    });
+
+    if (!nearest) {
+      return null;
+    }
+
+    return {
+      id: nearest.candidate.id,
+      distanceMeters: nearest.distanceMeters,
+    };
+  }
+
+  async _ensureNoDuplicateWithinRadiusTx(
+    tx,
+    { latitude, longitude, radiusMeters, excludeId = undefined }
+  ) {
+    const conflictingCheckpoint = await this._findNearestByLocationWithinRadiusWithClient(
+      tx,
+      latitude,
+      longitude,
+      radiusMeters,
+      excludeId
+    );
+
+    if (!conflictingCheckpoint) {
+      return;
+    }
+
+    throw buildRepoError(
+      CHECKPOINT_REPO_ERROR_CODES.DUPLICATE_LOCATION_CONFLICT,
+      'Checkpoint already exists within duplicate radius',
+      {
+        conflictingCheckpoint,
+      }
+    );
   }
 
   _checkpointMutationData(data) {
@@ -211,55 +335,13 @@ export class CheckpointsRepository {
   }
 
   async findNearestByLocationWithinRadius(latitude, longitude, radiusMeters, excludeId) {
-    const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(
-      Number(latitude),
-      Number(longitude),
-      radiusMeters
-    );
-
-    const where = {
-      latitude: {
-        gte: minLat,
-        lte: maxLat,
-      },
-      longitude: {
-        gte: minLng,
-        lte: maxLng,
-      },
-      ...(excludeId !== undefined &&
-        excludeId !== null && {
-          id: {
-            not: excludeId,
-          },
-        }),
-    };
-
-    const candidateCheckpoints = await prisma.checkpoint.findMany({
-      where,
-      select: {
-        id: true,
-        latitude: true,
-        longitude: true,
-      },
-    });
-
-    const nearest = findNearestCandidateWithinRadiusMeters({
-      originLat: Number(latitude),
-      originLng: Number(longitude),
-      candidates: candidateCheckpoints,
+    return this._findNearestByLocationWithinRadiusWithClient(
+      prisma,
+      latitude,
+      longitude,
       radiusMeters,
-      getLat: (candidate) => candidate.latitude,
-      getLng: (candidate) => candidate.longitude,
-    });
-
-    if (!nearest) {
-      return null;
-    }
-
-    return {
-      id: nearest.candidate.id,
-      distanceMeters: nearest.distanceMeters,
-    };
+      excludeId
+    );
   }
 
   async findNearby({ lat, lng, radiusMeters, status, skip, take, sortBy, sortOrder }) {
@@ -315,8 +397,22 @@ export class CheckpointsRepository {
     };
   }
 
-  async createWithAudit({ data, audit }) {
+  async createWithAudit({ data, audit, duplicateGuard }) {
     return prismaTransaction(async (tx) => {
+      if (duplicateGuard) {
+        await this._acquireLocationAdvisoryLocks(
+          tx,
+          duplicateGuard.latitude,
+          duplicateGuard.longitude
+        );
+
+        await this._ensureNoDuplicateWithinRadiusTx(tx, {
+          latitude: duplicateGuard.latitude,
+          longitude: duplicateGuard.longitude,
+          radiusMeters: duplicateGuard.radiusMeters,
+        });
+      }
+
       const createdCheckpoint = await tx.checkpoint.create({
         data: this._checkpointMutationData(data),
         select: this._baseSelect(),
@@ -407,13 +503,77 @@ export class CheckpointsRepository {
     };
   }
 
-  async updateByIdWithAudit(id, { data, audit, statusHistory }) {
+  async updateByIdWithAudit(
+    id,
+    { data, audit, statusHistory, expectedCurrentStatus, duplicateGuard }
+  ) {
     return prismaTransaction(async (tx) => {
-      const updatedCheckpoint = await tx.checkpoint.update({
-        where: { id },
-        data: this._checkpointMutationData(data),
-        select: this._baseSelect(),
-      });
+      const mutationData = this._checkpointMutationData(data);
+      let updatedCheckpoint;
+
+      if (duplicateGuard) {
+        await this._acquireLocationAdvisoryLocks(
+          tx,
+          duplicateGuard.latitude,
+          duplicateGuard.longitude
+        );
+
+        await this._ensureNoDuplicateWithinRadiusTx(tx, {
+          latitude: duplicateGuard.latitude,
+          longitude: duplicateGuard.longitude,
+          radiusMeters: duplicateGuard.radiusMeters,
+          excludeId: duplicateGuard.excludeId ?? id,
+        });
+      }
+
+      if (expectedCurrentStatus !== undefined && expectedCurrentStatus !== null) {
+        const updateResult = await tx.checkpoint.updateMany({
+          where: {
+            id,
+            status: expectedCurrentStatus,
+          },
+          data: mutationData,
+        });
+
+        if (updateResult.count === 0) {
+          const existingCheckpoint = await tx.checkpoint.findUnique({
+            where: { id },
+            select: {
+              id: true,
+            },
+          });
+
+          if (!existingCheckpoint) {
+            throw buildRepoError(
+              CHECKPOINT_REPO_ERROR_CODES.NOT_FOUND,
+              `Checkpoint with id ${id} not found`
+            );
+          }
+
+          throw buildRepoError(
+            CHECKPOINT_REPO_ERROR_CODES.CONCURRENT_STATUS_CONFLICT,
+            `Checkpoint status for id ${id} changed before update`
+          );
+        }
+
+        updatedCheckpoint = await tx.checkpoint.findUnique({
+          where: { id },
+          select: this._baseSelect(),
+        });
+
+        if (!updatedCheckpoint) {
+          throw buildRepoError(
+            CHECKPOINT_REPO_ERROR_CODES.NOT_FOUND,
+            `Checkpoint with id ${id} not found`
+          );
+        }
+      } else {
+        updatedCheckpoint = await tx.checkpoint.update({
+          where: { id },
+          data: mutationData,
+          select: this._baseSelect(),
+        });
+      }
 
       if (statusHistory) {
         await this._createStatusHistoryLog(tx, {
