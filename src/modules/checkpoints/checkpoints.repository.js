@@ -1,8 +1,6 @@
 import { prisma, prismaTransaction, query } from '#database/db.js';
-import {
-  findNearestCandidateWithinRadiusMeters,
-  getBoundingBoxByRadiusMeters,
-} from '#shared/utils/geo.js';
+import { Prisma } from '@prisma/client';
+import { getBoundingBoxByRadiusMeters } from '#shared/utils/geo.js';
 
 const CHECKPOINT_REPO_ERROR_CODES = {
   NOT_FOUND: 'CHECKPOINT_REPO_NOT_FOUND',
@@ -132,54 +130,53 @@ export class CheckpointsRepository {
     radiusMeters,
     excludeId
   ) {
+    const originLat = Number(latitude);
+    const originLng = Number(longitude);
+
     const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(
-      Number(latitude),
-      Number(longitude),
+      originLat,
+      originLng,
       radiusMeters
     );
 
-    const where = {
-      latitude: {
-        gte: minLat,
-        lte: maxLat,
-      },
-      longitude: {
-        gte: minLng,
-        lte: maxLng,
-      },
-      ...(excludeId !== undefined &&
-        excludeId !== null && {
-          id: {
-            not: excludeId,
-          },
-        }),
-    };
+    const excludedCheckpointId = excludeId ?? null;
+    const excludeClause =
+      excludedCheckpointId === null
+        ? Prisma.empty
+        : Prisma.sql`AND c.id <> ${excludedCheckpointId}`;
 
-    const candidateCheckpoints = await dbClient.checkpoint.findMany({
-      where,
-      select: {
-        id: true,
-        latitude: true,
-        longitude: true,
-      },
-    });
+    const nearestRows = await dbClient.$queryRaw`
+      WITH candidates AS (
+        SELECT
+          c.id,
+          6371000 * 2 * ASIN(
+            SQRT(
+              POWER(SIN(RADIANS((${originLat} - c.latitude::double precision) / 2)), 2)
+              + COS(RADIANS(${originLat})) * COS(RADIANS(c.latitude::double precision))
+              * POWER(SIN(RADIANS((${originLng} - c.longitude::double precision) / 2)), 2)
+            )
+          ) AS distance_meters
+        FROM checkpoints c
+        WHERE c.latitude BETWEEN ${minLat} AND ${maxLat}
+          AND c.longitude BETWEEN ${minLng} AND ${maxLng}
+          ${excludeClause}
+      )
+      SELECT id, distance_meters
+      FROM candidates
+      WHERE distance_meters <= ${radiusMeters}
+      ORDER BY distance_meters ASC, id ASC
+      LIMIT 1
+    `;
 
-    const nearest = findNearestCandidateWithinRadiusMeters({
-      originLat: Number(latitude),
-      originLng: Number(longitude),
-      candidates: candidateCheckpoints,
-      radiusMeters,
-      getLat: (candidate) => candidate.latitude,
-      getLng: (candidate) => candidate.longitude,
-    });
+    const nearest = nearestRows?.[0];
 
     if (!nearest) {
       return null;
     }
 
     return {
-      id: nearest.candidate.id,
-      distanceMeters: nearest.distanceMeters,
+      id: Number(nearest.id),
+      distanceMeters: Number(nearest.distance_meters),
     };
   }
 
