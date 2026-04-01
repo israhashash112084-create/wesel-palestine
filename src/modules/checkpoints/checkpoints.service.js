@@ -3,6 +3,7 @@ import { AppError, NotFoundError, ConflictError, BadRequestError } from '#shared
 import { DUPLICATE_RADIUS_METERS } from '#shared/constants/duplicate-detection.js';
 import { CHECKPOINT_STATUSES, CHECKPOINT_STATUS_TRANSITIONS } from '#shared/constants/enums.js';
 import { isPrismaUniqueConstraintError } from '#shared/utils/prisma-errors.js';
+import { buildAuditDiff } from '#shared/utils/audit-diff.js';
 import redisClient from '#shared/utils/radis.js';
 import { logger } from '#shared/utils/logger.js';
 
@@ -10,6 +11,16 @@ const CACHE_TTL_LIST = 120;
 const CACHE_TTL_SINGLE = 180;
 const CACHE_TTL_NEARBY = 120;
 const CACHE_VERSION_KEY = 'checkpoints:list:version';
+const CHECKPOINT_AUDIT_DIFF_FIELDS = [
+  'name',
+  'area',
+  'road',
+  'city',
+  'description',
+  'latitude',
+  'longitude',
+  'status',
+];
 
 const _cacheKey = {
   list: (filters, version) => `checkpoints:list:v${version}:${JSON.stringify(filters)}`,
@@ -99,38 +110,6 @@ export class CheckpointsService {
     }
 
     return value;
-  }
-
-  _buildAuditDiff(existingCheckpoint, body) {
-    const updatableFields = [
-      'name',
-      'area',
-      'road',
-      'city',
-      'description',
-      'latitude',
-      'longitude',
-      'status',
-    ];
-
-    const oldValues = {};
-    const newValues = {};
-
-    for (const field of updatableFields) {
-      if (body[field] === undefined) {
-        continue;
-      }
-
-      const oldValue = this._toComparableValue(existingCheckpoint[field]);
-      const newValue = this._toComparableValue(body[field]);
-
-      if (oldValue !== newValue) {
-        oldValues[field] = oldValue;
-        newValues[field] = newValue;
-      }
-    }
-
-    return { oldValues, newValues };
   }
 
   _isTransitionAllowed(currentStatus, nextStatus) {
@@ -410,7 +389,11 @@ export class CheckpointsService {
           this._assertValidStatusTransition(existingCheckpoint.status, body.status);
         }
 
-        const { oldValues, newValues } = this._buildAuditDiff(existingCheckpoint, body);
+        const { oldValues, newValues } = buildAuditDiff(
+          existingCheckpoint,
+          body,
+          CHECKPOINT_AUDIT_DIFF_FIELDS
+        );
 
         if (Object.keys(newValues).length === 0) {
           throw new BadRequestError('No changes detected in update payload');
