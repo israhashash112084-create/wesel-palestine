@@ -63,8 +63,11 @@ const _invalidateReportCache = async (reportId) => {
     );
 
     await redisClient.incr(CACHE_VERSION_KEY);
-  } catch {
-    /* best-effort */
+  } catch (error) {
+    logger.warn('[reports] cache invalidation degraded', {
+      reportId,
+      error: error.message,
+    });
   }
 };
 

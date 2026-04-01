@@ -69,8 +69,11 @@ const _invalidateCheckpointCache = async (checkpointId) => {
     }
 
     await redisClient.incr(CACHE_VERSION_KEY);
-  } catch {
-    /* best-effort */
+  } catch (error) {
+    logger.warn('[checkpoints.service] cache invalidation degraded', {
+      checkpointId,
+      error: error.message,
+    });
   }
 };
 

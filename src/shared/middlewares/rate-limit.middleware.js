@@ -1,8 +1,9 @@
 import { rateLimit } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
-import redisClient from '#shared/utils/radis.js';
+import redisClient, { isRedisAvailable } from '#shared/utils/radis.js';
 import { env } from '#config/env.js';
 import { ConflictError } from '#shared/utils/errors.js';
+import { logger } from '#shared/utils/logger.js';
 
 /**
  * @param {{ max: number, windowSec: number, message?: string }} options
@@ -13,6 +14,7 @@ const createRateLimiter = ({ max, windowSec, message }) => {
     max,
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     keyGenerator: (req) => req.userInfo?.id ?? req.ip,
     handler: (_req, res) => {
       res.status(429).json({
@@ -22,10 +24,12 @@ const createRateLimiter = ({ max, windowSec, message }) => {
     },
   };
 
-  if (redisClient) {
+  if (isRedisAvailable()) {
     options.store = new RedisStore({
       sendCommand: (...args) => redisClient.sendCommand(args),
     });
+  } else {
+    logger.warn('[rate-limit] redis unavailable; using in-memory limiter store');
   }
 
   return rateLimit(options);
@@ -105,20 +109,43 @@ export const checkAreaReportLimit = async (userId, area) => {
   const normalizedArea = area.trim().toLowerCase();
   const key = `area_report_limit:${userId}:${normalizedArea}`;
 
-  const count = await redisClient.incr(key);
+  let count;
 
-  if (count === 1) {
-    await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+  try {
+    count = await redisClient.incr(key);
+  } catch (error) {
+    logger.warn('[rate-limit] area report limiter degraded: redis unavailable', {
+      userId,
+      area: normalizedArea,
+      error: error.message,
+    });
+    return;
   }
 
-  if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
-    const ttl = await redisClient.ttl(key);
-    const hoursLeft = Math.ceil(ttl / 3600);
+  try {
+    if (count === 1) {
+      await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+    }
 
-    throw new ConflictError(
-      `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} reports for "${area}". ` +
-        `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
-    );
+    if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
+      const ttl = await redisClient.ttl(key);
+      const hoursLeft = Math.ceil(ttl / 3600);
+
+      throw new ConflictError(
+        `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} reports for "${area}". ` +
+          `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
+      );
+    }
+  } catch (error) {
+    if (error instanceof ConflictError) {
+      throw error;
+    }
+
+    logger.warn('[rate-limit] area report limiter degraded after increment', {
+      userId,
+      area: normalizedArea,
+      error: error.message,
+    });
   }
 };
 
@@ -135,20 +162,43 @@ export const checkAreaIncidentLimit = async (userId, area) => {
   const normalizedArea = area.trim().toLowerCase();
   const key = `area_incident_limit:${userId}:${normalizedArea}`;
 
-  const count = await redisClient.incr(key);
+  let count;
 
-  if (count === 1) {
-    await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+  try {
+    count = await redisClient.incr(key);
+  } catch (error) {
+    logger.warn('[rate-limit] area incident limiter degraded: redis unavailable', {
+      userId,
+      area: normalizedArea,
+      error: error.message,
+    });
+    return;
   }
 
-  if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
-    const ttl = await redisClient.ttl(key);
-    const hoursLeft = Math.ceil(ttl / 3600);
+  try {
+    if (count === 1) {
+      await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+    }
 
-    throw new ConflictError(
-      `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} incidents for "${area}". ` +
-        `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
-    );
+    if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
+      const ttl = await redisClient.ttl(key);
+      const hoursLeft = Math.ceil(ttl / 3600);
+
+      throw new ConflictError(
+        `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} incidents for "${area}". ` +
+          `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
+      );
+    }
+  } catch (error) {
+    if (error instanceof ConflictError) {
+      throw error;
+    }
+
+    logger.warn('[rate-limit] area incident limiter degraded after increment', {
+      userId,
+      area: normalizedArea,
+      error: error.message,
+    });
   }
 };
 
