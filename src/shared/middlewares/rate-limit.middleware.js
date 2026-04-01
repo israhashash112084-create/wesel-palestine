@@ -55,6 +55,12 @@ export const checkpointUpdateLimiter = createRateLimiter({
   message: `You can only update ${env.RATE_LIMIT_MAX_REQUESTS} checkpoints every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
 
+export const checkpointDeleteLimiter = createRateLimiter({
+  max: parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `You can only delete ${env.RATE_LIMIT_MAX_REQUESTS} checkpoints every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
 export const routeEstimateLimiter = createRateLimiter({
   max: parseInt(env.ROUTE_LIMIT_MAX_REQUESTS, 10),
   windowSec: parseInt(env.ROUTE_LIMIT_WINDOW_MS, 10) / 1000,

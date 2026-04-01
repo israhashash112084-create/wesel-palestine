@@ -4,6 +4,7 @@ import { UserRoles } from '#shared/constants/roles.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import {
   checkpointCreateLimiter,
+  checkpointDeleteLimiter,
   checkpointUpdateLimiter,
 } from '#shared/middlewares/rate-limit.middleware.js';
 import {
@@ -74,6 +75,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     '/:id',
     authenticate,
     authorize(UserRoles.ADMIN),
+    checkpointDeleteLimiter,
     validateRequest(checkpointIdParamSchema, 'params'),
     checkpointsController.deleteCheckpoint
   );
