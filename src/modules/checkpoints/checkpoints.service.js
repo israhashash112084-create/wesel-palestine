@@ -302,10 +302,16 @@ export class CheckpointsService {
       throw new NotFoundError(`Checkpoint with id ${checkpointId}`);
     }
 
-    const { page, limit, sortBy, sortOrder } = filters;
+    const { changedBy, oldStatus, newStatus, fromDate, toDate, page, limit, sortBy, sortOrder } =
+      filters;
     const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
     const { history, total } = await this.repo.findStatusHistory(checkpointId, {
+      changedBy,
+      oldStatus,
+      newStatus,
+      fromDate,
+      toDate,
       skip,
       take,
       sortBy,

@@ -107,6 +107,22 @@ export const updateCheckpointStatusSchema = Joi.object({
 });
 
 export const checkpointStatusHistoryQuerySchema = Joi.object({
+  changedBy: Joi.string()
+    .pattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+    .optional()
+    .messages({
+      'string.pattern.base': 'changedBy must be a valid UUID',
+    }),
+  oldStatus: Joi.string()
+    .valid(...checkpointStatuses)
+    .optional(),
+  newStatus: Joi.string()
+    .valid(...checkpointStatuses)
+    .optional(),
+  fromDate: Joi.date().iso().optional(),
+  toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
+    'date.greater': 'toDate must be greater than fromDate',
+  }),
   page: pageQuerySchema,
   limit: limitQuerySchema,
   sortBy: Joi.string().valid('changedAt').default('changedAt'),

@@ -264,10 +264,28 @@ export class CheckpointsRepository {
     });
   }
 
-  async findStatusHistory(checkpointId, { skip, take, sortBy, sortOrder }) {
+  async findStatusHistory(
+    checkpointId,
+    { changedBy, oldStatus, newStatus, fromDate, toDate, skip, take, sortBy, sortOrder }
+  ) {
+    const where = {
+      checkpointId,
+      ...(changedBy ? { changedBy } : {}),
+      ...(oldStatus ? { oldStatus } : {}),
+      ...(newStatus ? { newStatus } : {}),
+      ...(fromDate || toDate
+        ? {
+            changedAt: {
+              ...(fromDate ? { gte: new Date(fromDate) } : {}),
+              ...(toDate ? { lte: new Date(toDate) } : {}),
+            },
+          }
+        : {}),
+    };
+
     const { records, total } = await prismaTransaction(async (tx) => {
       const records = await tx.checkpointStatusHistory.findMany({
-        where: { checkpointId },
+        where,
         orderBy: { [sortBy]: sortOrder },
         skip,
         take,
@@ -288,7 +306,7 @@ export class CheckpointsRepository {
       });
 
       const total = await tx.checkpointStatusHistory.count({
-        where: { checkpointId },
+        where,
       });
 
       return { records, total };
