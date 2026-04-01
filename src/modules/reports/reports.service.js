@@ -639,62 +639,151 @@ export class ReportsService {
     return report;
   }
 
-  async _approveReport(reportId, report, moderatorId, reason) {
-    await this.repo.update(reportId, {
-      status: 'verified',
-      moderatedBy: moderatorId,
-      moderatedAt: new Date(),
-      rejectReason: null,
-    });
+  async _rollbackModerationFailure({
+    reportId,
+    action,
+    snapshot,
+    scoreDelta,
+    scoreAdjusted,
+    auditLogId,
+    originalError,
+  }) {
+    const rollbackFailures = [];
 
-    await this.repo.createAuditLog({ reportId, moderatorId, action: 'approved', reason });
-
-    await this.repo.updateMany(
-      { duplicateOf: reportId },
-      { status: 'verified', moderatedAt: new Date(), rejectReason: null }
-    );
-
-    if (report.incidentId) {
-      const actor = moderatorId ? { id: moderatorId } : systemUser();
-      await this.incidentsService.verifyIncident(
-        report.incidentId,
-        actor,
-        reason ?? 'Verified via report'
-      );
+    if (snapshot) {
+      try {
+        await this.repo.restoreModerationSnapshot(snapshot);
+      } catch (rollbackError) {
+        rollbackFailures.push(`state:${rollbackError.message}`);
+      }
     }
 
-    await this._applyCheckpointStatusFromReport(
-      report,
-      moderatorId ?? systemUser().id,
-      reason ?? 'Status verified via report moderation'
-    );
+    if (scoreAdjusted && scoreDelta !== 0) {
+      try {
+        await this.repo.adjustReportOwnersScore(reportId, -scoreDelta);
+      } catch (rollbackError) {
+        rollbackFailures.push(`score:${rollbackError.message}`);
+      }
+    }
 
-    await this.repo.increaseReportOwnersScore(reportId);
-    await _invalidateReportCache(reportId);
+    if (auditLogId) {
+      try {
+        await this.repo.deleteAuditLogById(auditLogId);
+      } catch (rollbackError) {
+        rollbackFailures.push(`audit:${rollbackError.message}`);
+      }
+    }
+
+    if (rollbackFailures.length > 0) {
+      logger.error('[reports] moderation compensation failed', {
+        reportId,
+        action,
+        originalError: originalError?.message,
+        rollbackFailures,
+      });
+    }
+  }
+
+  async _approveReport(reportId, report, moderatorId, reason) {
+    const moderatedAt = new Date();
+    const snapshot = await this.repo.getModerationSnapshot(reportId);
+    const actorId = moderatorId ?? systemUser().id;
+    let scoreAdjusted = false;
+    let auditLogId;
+
+    try {
+      await this.repo.applyModerationOutcome(reportId, {
+        status: REPORT_STATUSES.VERIFIED,
+        moderatedBy: moderatorId ?? null,
+        moderatedAt,
+        rejectReason: null,
+      });
+
+      if (report.incidentId) {
+        await this.incidentsService.verifyIncident(
+          report.incidentId,
+          { id: actorId },
+          reason ?? 'Verified via report'
+        );
+      }
+
+      await this._applyCheckpointStatusFromReport(
+        report,
+        actorId,
+        reason ?? 'Status verified via report moderation'
+      );
+
+      await this.repo.increaseReportOwnersScore(reportId);
+      scoreAdjusted = true;
+
+      const auditLog = await this.repo.createAuditLog({
+        reportId,
+        moderatorId,
+        action: 'approved',
+        reason,
+      });
+      auditLogId = auditLog.id;
+
+      await _invalidateReportCache(reportId);
+    } catch (error) {
+      await this._rollbackModerationFailure({
+        reportId,
+        action: 'approved',
+        snapshot,
+        scoreDelta: 1,
+        scoreAdjusted,
+        auditLogId,
+        originalError: error,
+      });
+
+      throw error;
+    }
   }
 
   async _rejectReport(reportId, report, moderatorId, reason) {
-    await this.repo.update(reportId, {
-      status: 'rejected',
-      rejectReason: reason,
-      moderatedBy: moderatorId,
-      moderatedAt: new Date(),
-    });
+    const moderatedAt = new Date();
+    const snapshot = await this.repo.getModerationSnapshot(reportId);
+    const actorId = moderatorId ?? systemUser().id;
+    let scoreAdjusted = false;
+    let auditLogId;
 
-    await this.repo.createAuditLog({ reportId, moderatorId, action: 'rejected', reason });
+    try {
+      await this.repo.applyModerationOutcome(reportId, {
+        status: REPORT_STATUSES.REJECTED,
+        moderatedBy: moderatorId ?? null,
+        moderatedAt,
+        rejectReason: reason,
+      });
 
-    await this.repo.updateMany(
-      { duplicateOf: reportId },
-      { status: 'rejected', rejectReason: reason, moderatedAt: new Date() }
-    );
+      if (report.incidentId) {
+        await this.incidentsService.rejectIncident(report.incidentId, { id: actorId });
+      }
 
-    if (report.incidentId) {
-      const actor = moderatorId ? { id: moderatorId } : systemUser();
-      await this.incidentsService.rejectIncident(report.incidentId, actor);
+      await this.repo.decreaseReportOwnersScore(reportId);
+      scoreAdjusted = true;
+
+      const auditLog = await this.repo.createAuditLog({
+        reportId,
+        moderatorId,
+        action: 'rejected',
+        reason,
+      });
+      auditLogId = auditLog.id;
+
+      await _invalidateReportCache(reportId);
+    } catch (error) {
+      await this._rollbackModerationFailure({
+        reportId,
+        action: 'rejected',
+        snapshot,
+        scoreDelta: -1,
+        scoreAdjusted,
+        auditLogId,
+        originalError: error,
+      });
+
+      throw error;
     }
-
-    await this.repo.decreaseReportOwnersScore(reportId);
-    await _invalidateReportCache(reportId);
   }
 
   async _checkAutoDecision(report) {
