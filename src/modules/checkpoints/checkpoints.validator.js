@@ -47,6 +47,12 @@ export const createCheckpointSchema = Joi.object({
   area: Joi.string().max(100).optional().messages({
     'string.max': 'Area name must not exceed 100 characters',
   }),
+  road: Joi.string().max(255).optional().messages({
+    'string.max': 'Road name must not exceed 255 characters',
+  }),
+  city: Joi.string().max(255).optional().messages({
+    'string.max': 'City name must not exceed 255 characters',
+  }),
   description: Joi.string().max(1000).optional().messages({
     'string.max': 'Description must not exceed 1000 characters',
   }),
@@ -69,6 +75,12 @@ export const updateCheckpointSchema = Joi.object({
   }),
   area: Joi.string().max(100).optional().messages({
     'string.max': 'Area name must not exceed 100 characters',
+  }),
+  road: Joi.string().max(255).optional().messages({
+    'string.max': 'Road name must not exceed 255 characters',
+  }),
+  city: Joi.string().max(255).optional().messages({
+    'string.max': 'City name must not exceed 255 characters',
   }),
   description: Joi.string().max(1000).optional().messages({
     'string.max': 'Description must not exceed 1000 characters',

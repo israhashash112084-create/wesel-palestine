@@ -1,7 +1,5 @@
 import { getPaginationParams } from '#shared/utils/pagination.js';
-import { NotFoundError } from '#shared/utils/errors.js';
-import { ConflictError } from '#shared/utils/errors.js';
-import { BadRequestError } from '#shared/utils/errors.js';
+import { NotFoundError, ConflictError, BadRequestError } from '#shared/utils/errors.js';
 import { DUPLICATE_RADIUS_METERS } from '#shared/constants/duplicate-detection.js';
 
 export class CheckpointsService {
