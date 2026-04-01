@@ -343,6 +343,16 @@ export class CheckpointsRepository {
     });
   }
 
+  async findByIdForDeleteAudit(id) {
+    return prisma.checkpoint.findUnique({
+      where: { id },
+      select: {
+        ...this._baseSelect(),
+        createdBy: true,
+      },
+    });
+  }
+
   async findStatusHistory(
     checkpointId,
     { changedBy, oldStatus, newStatus, fromDate, toDate, skip, take, sortBy, sortOrder }

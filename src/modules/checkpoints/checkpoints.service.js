@@ -469,7 +469,7 @@ export class CheckpointsService {
   }
 
   async deleteCheckpoint(id, adminInfo) {
-    const checkpoint = await this.repo.findById(id);
+    const checkpoint = await this.repo.findByIdForDeleteAudit(id);
 
     if (!checkpoint) {
       throw new NotFoundError(`Checkpoint with id ${id}`);
@@ -487,6 +487,7 @@ export class CheckpointsService {
         latitude: this._toComparableValue(checkpoint.latitude),
         longitude: this._toComparableValue(checkpoint.longitude),
         status: checkpoint.status,
+        createdBy: checkpoint.createdBy ?? null,
       },
       newValues: null,
     });
