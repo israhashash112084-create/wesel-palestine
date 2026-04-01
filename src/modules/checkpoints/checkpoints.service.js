@@ -3,6 +3,56 @@ import { NotFoundError, ConflictError, BadRequestError } from '#shared/utils/err
 import { DUPLICATE_RADIUS_METERS } from '#shared/constants/duplicate-detection.js';
 import { CHECKPOINT_STATUSES, CHECKPOINT_STATUS_TRANSITIONS } from '#shared/constants/enums.js';
 import { isPrismaUniqueConstraintError } from '#shared/utils/prisma-errors.js';
+import redisClient from '#shared/utils/radis.js';
+
+const CACHE_TTL_LIST = 120;
+const CACHE_TTL_SINGLE = 180;
+const CACHE_TTL_NEARBY = 120;
+const CACHE_VERSION_KEY = 'checkpoints:list:version';
+
+const _cacheKey = {
+  list: (filters, version) => `checkpoints:list:v${version}:${JSON.stringify(filters)}`,
+  nearby: (filters, version) => `checkpoints:nearby:v${version}:${JSON.stringify(filters)}`,
+  single: (id) => `checkpoints:single:${id}`,
+};
+
+const _getCache = async (key) => {
+  try {
+    const val = await redisClient.get(key);
+    return val ? JSON.parse(val) : null;
+  } catch {
+    return null;
+  }
+};
+
+const _setCache = async (key, value, ttl) => {
+  try {
+    await redisClient.set(key, JSON.stringify(value), { EX: ttl });
+  } catch {
+    /* best-effort */
+  }
+};
+
+const _getListCacheVersion = async () => {
+  try {
+    const version = await redisClient.get(CACHE_VERSION_KEY);
+    return version ?? '1';
+  } catch {
+    return '1';
+  }
+};
+
+const _invalidateCheckpointCache = async (checkpointId) => {
+  try {
+    if (checkpointId !== undefined && checkpointId !== null) {
+      await redisClient.del(_cacheKey.single(checkpointId));
+    }
+
+    await redisClient.incr(CACHE_VERSION_KEY);
+  } catch {
+    /* best-effort */
+  }
+};
 
 export class CheckpointsService {
   constructor(checkpointsRepository) {
@@ -101,6 +151,28 @@ export class CheckpointsService {
     const { status, search, minLat, maxLat, minLng, maxLng, page, limit, sortBy, sortOrder } =
       filters;
 
+    const version = await _getListCacheVersion();
+    const cacheKey = _cacheKey.list(
+      {
+        status,
+        search,
+        minLat,
+        maxLat,
+        minLng,
+        maxLng,
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+      },
+      version
+    );
+    const cached = await _getCache(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
     const { checkpoints, total } = await this.repo.findMany({
@@ -116,14 +188,38 @@ export class CheckpointsService {
       sortOrder,
     });
 
-    return {
+    const result = {
       checkpoints,
       pagination: buildPaginationMeta(total),
     };
+
+    await _setCache(cacheKey, result, CACHE_TTL_LIST);
+
+    return result;
   }
 
   async getNearbyCheckpoints(filters) {
     const { lat, lng, radiusMeters, status, page, limit, sortBy, sortOrder } = filters;
+
+    const version = await _getListCacheVersion();
+    const cacheKey = _cacheKey.nearby(
+      {
+        lat,
+        lng,
+        radiusMeters,
+        status,
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+      },
+      version
+    );
+    const cached = await _getCache(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
 
     const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
@@ -138,10 +234,14 @@ export class CheckpointsService {
       sortOrder,
     });
 
-    return {
+    const result = {
       checkpoints,
       pagination: buildPaginationMeta(total),
     };
+
+    await _setCache(cacheKey, result, CACHE_TTL_NEARBY);
+
+    return result;
   }
 
   async createCheckpoint(adminInfo, body) {
@@ -158,7 +258,7 @@ export class CheckpointsService {
     }
 
     try {
-      return await this.repo.createWithAudit({
+      const createdCheckpoint = await this.repo.createWithAudit({
         data: {
           name,
           area,
@@ -186,6 +286,10 @@ export class CheckpointsService {
           },
         },
       });
+
+      await _invalidateCheckpointCache(createdCheckpoint.id);
+
+      return createdCheckpoint;
     } catch (error) {
       if (this._isCheckpointLocationUniqueConstraintError(error)) {
         await this._throwDuplicateCheckpointConflict(latitude, longitude);
@@ -196,11 +300,20 @@ export class CheckpointsService {
   }
 
   async getCheckpointById(id) {
+    const cacheKey = _cacheKey.single(id);
+    const cached = await _getCache(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const checkpoint = await this.repo.findById(id);
 
     if (!checkpoint) {
       throw new NotFoundError(`Checkpoint with id ${id}`);
     }
+
+    await _setCache(cacheKey, checkpoint, CACHE_TTL_SINGLE);
 
     return checkpoint;
   }
@@ -254,7 +367,7 @@ export class CheckpointsService {
         : null;
 
     try {
-      return await this.repo.updateByIdWithAudit(id, {
+      const updatedCheckpoint = await this.repo.updateByIdWithAudit(id, {
         data: {
           name: body.name,
           area: body.area,
@@ -273,6 +386,10 @@ export class CheckpointsService {
         },
         statusHistory,
       });
+
+      await _invalidateCheckpointCache(id);
+
+      return updatedCheckpoint;
     } catch (error) {
       if (
         (body.latitude !== undefined || body.longitude !== undefined) &&
@@ -294,7 +411,7 @@ export class CheckpointsService {
 
     this._assertValidStatusTransition(existingCheckpoint.status, body.status);
 
-    return this.repo.updateByIdWithAudit(id, {
+    const updatedCheckpoint = await this.repo.updateByIdWithAudit(id, {
       data: {
         status: body.status,
       },
@@ -315,6 +432,10 @@ export class CheckpointsService {
         notes: body.notes,
       },
     });
+
+    await _invalidateCheckpointCache(id);
+
+    return updatedCheckpoint;
   }
 
   async getCheckpointStatusHistory(checkpointId, filters) {
@@ -369,5 +490,7 @@ export class CheckpointsService {
       },
       newValues: null,
     });
+
+    await _invalidateCheckpointCache(id);
   }
 }
