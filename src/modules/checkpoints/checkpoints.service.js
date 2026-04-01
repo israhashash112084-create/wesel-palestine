@@ -2,6 +2,7 @@ import { getPaginationParams } from '#shared/utils/pagination.js';
 import { NotFoundError, ConflictError, BadRequestError } from '#shared/utils/errors.js';
 import { DUPLICATE_RADIUS_METERS } from '#shared/constants/duplicate-detection.js';
 import { CHECKPOINT_STATUSES, CHECKPOINT_STATUS_TRANSITIONS } from '#shared/constants/enums.js';
+import { isPrismaUniqueConstraintError } from '#shared/utils/prisma-errors.js';
 
 export class CheckpointsService {
   constructor(checkpointsRepository) {
@@ -70,6 +71,32 @@ export class CheckpointsService {
     }
   }
 
+  _buildDuplicateCheckpointConflictMessage(conflictingCheckpoint) {
+    return `Checkpoint already exists within ${this.duplicateRadiusMeters}m (checkpoint #${conflictingCheckpoint.id}, distance: ${Math.round(conflictingCheckpoint.distanceMeters)}m)`;
+  }
+
+  _isCheckpointLocationUniqueConstraintError(error) {
+    return isPrismaUniqueConstraintError(error, {
+      constraintNames: ['uq_checkpoints_lat_lng_exact'],
+      fieldSets: [['latitude', 'longitude']],
+    });
+  }
+
+  async _throwDuplicateCheckpointConflict(latitude, longitude, excludeId) {
+    const conflictingCheckpoint = await this.repo.findNearestByLocationWithinRadius(
+      latitude,
+      longitude,
+      this.duplicateRadiusMeters,
+      excludeId
+    );
+
+    if (conflictingCheckpoint) {
+      throw new ConflictError(this._buildDuplicateCheckpointConflictMessage(conflictingCheckpoint));
+    }
+
+    throw new ConflictError('Checkpoint location conflicts with an existing checkpoint');
+  }
+
   async getAllCheckpoints(filters) {
     const { status, search, minLat, maxLat, minLng, maxLng, page, limit, sortBy, sortOrder } =
       filters;
@@ -105,28 +132,12 @@ export class CheckpointsService {
     );
 
     if (existingCheckpoint) {
-      throw new ConflictError(
-        `Checkpoint already exists within ${this.duplicateRadiusMeters}m (checkpoint #${existingCheckpoint.id}, distance: ${Math.round(existingCheckpoint.distanceMeters)}m)`
-      );
+      throw new ConflictError(this._buildDuplicateCheckpointConflictMessage(existingCheckpoint));
     }
 
-    return this.repo.createWithAudit({
-      data: {
-        name,
-        area,
-        road,
-        city,
-        description,
-        latitude,
-        longitude,
-        status,
-        createdBy: adminInfo.id,
-      },
-      audit: {
-        actorId: adminInfo.id,
-        action: 'created',
-        oldValues: null,
-        newValues: {
+    try {
+      return await this.repo.createWithAudit({
+        data: {
           name,
           area,
           road,
@@ -134,10 +145,32 @@ export class CheckpointsService {
           description,
           latitude,
           longitude,
-          status: status ?? CHECKPOINT_STATUSES.OPEN,
+          status,
+          createdBy: adminInfo.id,
         },
-      },
-    });
+        audit: {
+          actorId: adminInfo.id,
+          action: 'created',
+          oldValues: null,
+          newValues: {
+            name,
+            area,
+            road,
+            city,
+            description,
+            latitude,
+            longitude,
+            status: status ?? CHECKPOINT_STATUSES.OPEN,
+          },
+        },
+      });
+    } catch (error) {
+      if (this._isCheckpointLocationUniqueConstraintError(error)) {
+        await this._throwDuplicateCheckpointConflict(latitude, longitude);
+      }
+
+      throw error;
+    }
   }
 
   async getCheckpointById(id) {
@@ -157,10 +190,12 @@ export class CheckpointsService {
       throw new NotFoundError(`Checkpoint with id ${id}`);
     }
 
+    let targetLatitude;
+    let targetLongitude;
+
     if (body.latitude !== undefined || body.longitude !== undefined) {
-      const targetLatitude = body.latitude ?? this._toComparableValue(existingCheckpoint.latitude);
-      const targetLongitude =
-        body.longitude ?? this._toComparableValue(existingCheckpoint.longitude);
+      targetLatitude = body.latitude ?? this._toComparableValue(existingCheckpoint.latitude);
+      targetLongitude = body.longitude ?? this._toComparableValue(existingCheckpoint.longitude);
 
       const conflictingCheckpoint = await this.repo.findNearestByLocationWithinRadius(
         targetLatitude,
@@ -171,7 +206,7 @@ export class CheckpointsService {
 
       if (conflictingCheckpoint) {
         throw new ConflictError(
-          `Checkpoint already exists within ${this.duplicateRadiusMeters}m (checkpoint #${conflictingCheckpoint.id}, distance: ${Math.round(conflictingCheckpoint.distanceMeters)}m)`
+          this._buildDuplicateCheckpointConflictMessage(conflictingCheckpoint)
         );
       }
     }
@@ -196,25 +231,36 @@ export class CheckpointsService {
           }
         : null;
 
-    return this.repo.updateByIdWithAudit(id, {
-      data: {
-        name: body.name,
-        area: body.area,
-        road: body.road,
-        city: body.city,
-        description: body.description,
-        latitude: body.latitude,
-        longitude: body.longitude,
-        status: body.status,
-      },
-      audit: {
-        actorId: adminInfo.id,
-        action: 'updated',
-        oldValues,
-        newValues,
-      },
-      statusHistory,
-    });
+    try {
+      return await this.repo.updateByIdWithAudit(id, {
+        data: {
+          name: body.name,
+          area: body.area,
+          road: body.road,
+          city: body.city,
+          description: body.description,
+          latitude: body.latitude,
+          longitude: body.longitude,
+          status: body.status,
+        },
+        audit: {
+          actorId: adminInfo.id,
+          action: 'updated',
+          oldValues,
+          newValues,
+        },
+        statusHistory,
+      });
+    } catch (error) {
+      if (
+        (body.latitude !== undefined || body.longitude !== undefined) &&
+        this._isCheckpointLocationUniqueConstraintError(error)
+      ) {
+        await this._throwDuplicateCheckpointConflict(targetLatitude, targetLongitude, id);
+      }
+
+      throw error;
+    }
   }
 
   async updateCheckpointStatus(id, body, adminInfo) {
