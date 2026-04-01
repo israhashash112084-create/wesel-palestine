@@ -3,6 +3,10 @@ import { authenticate, authorize } from '#shared/middlewares/auth.middleware.js'
 import { UserRoles } from '#shared/constants/roles.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import {
+  checkpointCreateLimiter,
+  checkpointUpdateLimiter,
+} from '#shared/middlewares/rate-limit.middleware.js';
+import {
   listCheckpointsSchema,
   checkpointIdParamSchema,
   createCheckpointSchema,
@@ -18,6 +22,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     '/',
     authenticate,
     authorize(UserRoles.ADMIN),
+    checkpointCreateLimiter,
     validateRequest(createCheckpointSchema, 'body'),
     checkpointsController.createCheckpoint
   );
@@ -40,6 +45,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     '/:id',
     authenticate,
     authorize(UserRoles.ADMIN),
+    checkpointUpdateLimiter,
     validateRequest(checkpointIdParamSchema, 'params'),
     validateRequest(updateCheckpointSchema, 'body'),
     checkpointsController.updateCheckpoint
@@ -49,6 +55,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     '/:id/status',
     authenticate,
     authorize(UserRoles.ADMIN),
+    checkpointUpdateLimiter,
     validateRequest(checkpointIdParamSchema, 'params'),
     validateRequest(updateCheckpointStatusSchema, 'body'),
     checkpointsController.updateCheckpointStatus

@@ -266,6 +266,8 @@ export class CheckpointsService {
       oldValues: {
         name: checkpoint.name,
         area: checkpoint.area,
+        road: checkpoint.road,
+        city: checkpoint.city,
         description: checkpoint.description,
         latitude: this._toComparableValue(checkpoint.latitude),
         longitude: this._toComparableValue(checkpoint.longitude),

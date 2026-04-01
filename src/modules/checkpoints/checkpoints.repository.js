@@ -10,6 +10,8 @@ export class CheckpointsRepository {
       id: true,
       name: true,
       area: true,
+      road: true,
+      city: true,
       description: true,
       latitude: true,
       longitude: true,
@@ -74,6 +76,8 @@ export class CheckpointsRepository {
     return {
       ...(data.name !== undefined && { name: data.name }),
       ...(data.area !== undefined && { area: data.area }),
+      ...(data.road !== undefined && { road: data.road }),
+      ...(data.city !== undefined && { city: data.city }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.latitude !== undefined && { latitude: data.latitude }),
       ...(data.longitude !== undefined && { longitude: data.longitude }),
