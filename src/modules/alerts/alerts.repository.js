@@ -73,6 +73,12 @@ export class AlertsRepository {
     });
   }
 
+  async findIncidentById(id) {
+    return await prisma.incident.findUnique({
+      where: { id },
+    });
+  }
+
   async findMatchingSubscriptionsForIncident({ category }) {
     return await prisma.alertSubscription.findMany({
       where: {

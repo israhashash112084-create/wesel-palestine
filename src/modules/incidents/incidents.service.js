@@ -2,6 +2,7 @@ import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
 import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
+import { addIncidentAlertsJob } from '#modules/alerts/alerts.queue.js';
 
 export class IncidentsService {
   constructor(incidentsRepository, alertsService) {
@@ -291,14 +292,12 @@ export class IncidentsService {
     ];
   }
   async verifyIncident(id, userInfo, notes = 'Verified incident') {
-    const incident = await this._moderateIncident(id, INCIDENT_STATUSES.VERIFIED, userInfo, notes);
+  const incident = await this._moderateIncident(id, INCIDENT_STATUSES.VERIFIED, userInfo, notes);
 
-    if (this.alertsService) {
-      await this.alertsService.handleNewIncident(incident);
-    }
+  await addIncidentAlertsJob(incident.id);
 
-    return incident;
-  }
+  return incident;
+}
 
   async rejectIncident(id, userInfo, notes = 'Reject incident') {
     return this._moderateIncident(id, INCIDENT_STATUSES.REJECTED, userInfo, notes);
