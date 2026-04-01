@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { TRAFFIC_STATUSES } from '#shared/constants/enums.js';
+import { CHECKPOINT_STATUSES } from '#shared/constants/enums.js';
 import {
   pageQuerySchema,
   limitQuerySchema,
@@ -9,7 +9,7 @@ import {
   westBankLongitudeSchema,
 } from '#shared/utils/query-validator.js';
 
-const trafficStatuses = Object.values(TRAFFIC_STATUSES);
+const checkpointStatuses = Object.values(CHECKPOINT_STATUSES);
 
 const latitudeBounds = westBankLatitudeSchema;
 
@@ -17,7 +17,7 @@ const longitudeBounds = westBankLongitudeSchema;
 
 export const listCheckpointsSchema = Joi.object({
   status: Joi.string()
-    .valid(...trafficStatuses)
+    .valid(...checkpointStatuses)
     .optional(),
   search: Joi.string().trim().min(1).max(100).optional(),
   minLat: latitudeBounds.optional(),
@@ -63,9 +63,9 @@ export const createCheckpointSchema = Joi.object({
     'any.required': 'Longitude is required',
   }),
   status: Joi.string()
-    .valid(...trafficStatuses)
+    .valid(...checkpointStatuses)
     .optional()
-    .default(TRAFFIC_STATUSES.UNKNOWN),
+    .default(CHECKPOINT_STATUSES.OPEN),
 });
 
 export const updateCheckpointSchema = Joi.object({
@@ -88,7 +88,7 @@ export const updateCheckpointSchema = Joi.object({
   latitude: latitudeBounds.optional(),
   longitude: longitudeBounds.optional(),
   status: Joi.string()
-    .valid(...trafficStatuses)
+    .valid(...checkpointStatuses)
     .optional(),
   notes: Joi.string().max(500).optional(),
 })
@@ -101,7 +101,7 @@ export const updateCheckpointSchema = Joi.object({
 
 export const updateCheckpointStatusSchema = Joi.object({
   status: Joi.string()
-    .valid(...trafficStatuses)
+    .valid(...checkpointStatuses)
     .required(),
   notes: Joi.string().max(500).optional(),
 });

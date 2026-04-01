@@ -1,7 +1,7 @@
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { NotFoundError, ConflictError, BadRequestError } from '#shared/utils/errors.js';
 import { DUPLICATE_RADIUS_METERS } from '#shared/constants/duplicate-detection.js';
-import { CHECKPOINT_STATUS_TRANSITIONS } from '#shared/constants/enums.js';
+import { CHECKPOINT_STATUSES, CHECKPOINT_STATUS_TRANSITIONS } from '#shared/constants/enums.js';
 
 export class CheckpointsService {
   constructor(checkpointsRepository) {
@@ -134,7 +134,7 @@ export class CheckpointsService {
           description,
           latitude,
           longitude,
-          status: status ?? 'open',
+          status: status ?? CHECKPOINT_STATUSES.OPEN,
         },
       },
     });

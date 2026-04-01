@@ -42,6 +42,18 @@ export class CheckpointsRepository {
             mode: 'insensitive',
           },
         },
+        {
+          road: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          city: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
       ];
     }
 
