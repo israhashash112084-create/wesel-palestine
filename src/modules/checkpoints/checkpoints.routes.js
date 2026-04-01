@@ -42,7 +42,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
 
   router.get(
     '/nearby',
-    authenticate,
+    optionalAuthenticate,
     validateRequest(nearbyCheckpointsQuerySchema, 'query'),
     checkpointsController.getNearbyCheckpoints
   );
