@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '#shared/middlewares/auth.middleware.js';
+import {
+  authenticate,
+  optionalAuthenticate,
+  authorize,
+} from '#shared/middlewares/auth.middleware.js';
 import { UserRoles } from '#shared/constants/roles.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import {
@@ -31,7 +35,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
 
   router.get(
     '/',
-    authenticate,
+    optionalAuthenticate,
     validateRequest(listCheckpointsSchema, 'query'),
     checkpointsController.getAllCheckpoints
   );
@@ -45,7 +49,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
 
   router.get(
     '/:id',
-    authenticate,
+    optionalAuthenticate,
     validateRequest(checkpointIdParamSchema, 'params'),
     checkpointsController.getCheckpointById
   );
