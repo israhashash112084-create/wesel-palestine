@@ -1,6 +1,7 @@
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { NotFoundError, ConflictError, BadRequestError } from '#shared/utils/errors.js';
 import { DUPLICATE_RADIUS_METERS } from '#shared/constants/duplicate-detection.js';
+import { CHECKPOINT_STATUS_TRANSITIONS } from '#shared/constants/enums.js';
 
 export class CheckpointsService {
   constructor(checkpointsRepository) {
@@ -50,6 +51,23 @@ export class CheckpointsService {
     }
 
     return { oldValues, newValues };
+  }
+
+  _isTransitionAllowed(currentStatus, nextStatus) {
+    const allowedTransitions = CHECKPOINT_STATUS_TRANSITIONS[currentStatus] ?? [];
+    return allowedTransitions.includes(nextStatus);
+  }
+
+  _assertValidStatusTransition(currentStatus, nextStatus) {
+    if (currentStatus === nextStatus) {
+      throw new BadRequestError('Checkpoint status is already set to the requested value');
+    }
+
+    if (!this._isTransitionAllowed(currentStatus, nextStatus)) {
+      throw new ConflictError(
+        `Invalid checkpoint status transition from ${currentStatus} to ${nextStatus}`
+      );
+    }
   }
 
   async getAllCheckpoints(filters) {
@@ -158,6 +176,10 @@ export class CheckpointsService {
       }
     }
 
+    if (body.status !== undefined && body.status !== existingCheckpoint.status) {
+      this._assertValidStatusTransition(existingCheckpoint.status, body.status);
+    }
+
     const { oldValues, newValues } = this._buildAuditDiff(existingCheckpoint, body);
 
     if (Object.keys(newValues).length === 0) {
@@ -202,9 +224,7 @@ export class CheckpointsService {
       throw new NotFoundError(`Checkpoint with id ${id}`);
     }
 
-    if (existingCheckpoint.status === body.status) {
-      throw new BadRequestError('Checkpoint status is already set to the requested value');
-    }
+    this._assertValidStatusTransition(existingCheckpoint.status, body.status);
 
     return this.repo.updateByIdWithAudit(id, {
       data: {
