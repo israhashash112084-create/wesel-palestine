@@ -36,3 +36,6 @@ export const isPrismaUniqueConstraintError = (
 
   return hasConstraintName || hasFieldSet;
 };
+
+export const isPrismaRecordNotFoundError = (error) =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';

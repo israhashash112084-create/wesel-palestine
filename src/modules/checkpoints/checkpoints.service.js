@@ -2,7 +2,10 @@ import { getPaginationParams } from '#shared/utils/pagination.js';
 import { AppError, NotFoundError, ConflictError, BadRequestError } from '#shared/utils/errors.js';
 import { DUPLICATE_RADIUS_METERS } from '#shared/constants/duplicate-detection.js';
 import { CHECKPOINT_STATUSES, CHECKPOINT_STATUS_TRANSITIONS } from '#shared/constants/enums.js';
-import { isPrismaUniqueConstraintError } from '#shared/utils/prisma-errors.js';
+import {
+  isPrismaUniqueConstraintError,
+  isPrismaRecordNotFoundError,
+} from '#shared/utils/prisma-errors.js';
 import { buildAuditDiff } from '#shared/utils/audit-diff.js';
 import redisClient from '#shared/utils/radis.js';
 import { logger } from '#shared/utils/logger.js';
@@ -138,6 +141,10 @@ export class CheckpointsService {
       constraintNames: ['uq_checkpoints_lat_lng_exact'],
       fieldSets: [['latitude', 'longitude']],
     });
+  }
+
+  _isCheckpointRecordNotFoundError(error) {
+    return isPrismaRecordNotFoundError(error);
   }
 
   async _throwDuplicateCheckpointConflict(latitude, longitude, excludeId) {
@@ -441,6 +448,10 @@ export class CheckpointsService {
             await this._throwDuplicateCheckpointConflict(targetLatitude, targetLongitude, id);
           }
 
+          if (this._isCheckpointRecordNotFoundError(error)) {
+            throw new NotFoundError(`Checkpoint with id ${id}`);
+          }
+
           throw error;
         }
       }
@@ -460,27 +471,37 @@ export class CheckpointsService {
 
         this._assertValidStatusTransition(existingCheckpoint.status, body.status);
 
-        const updatedCheckpoint = await this.repo.updateByIdWithAudit(id, {
-          data: {
-            status: body.status,
-          },
-          audit: {
-            actorId: adminInfo.id,
-            action: 'updated',
-            oldValues: {
-              status: existingCheckpoint.status,
-            },
-            newValues: {
+        let updatedCheckpoint;
+
+        try {
+          updatedCheckpoint = await this.repo.updateByIdWithAudit(id, {
+            data: {
               status: body.status,
             },
-          },
-          statusHistory: {
-            changedBy: adminInfo.id,
-            oldStatus: existingCheckpoint.status,
-            newStatus: body.status,
-            notes: body.notes,
-          },
-        });
+            audit: {
+              actorId: adminInfo.id,
+              action: 'updated',
+              oldValues: {
+                status: existingCheckpoint.status,
+              },
+              newValues: {
+                status: body.status,
+              },
+            },
+            statusHistory: {
+              changedBy: adminInfo.id,
+              oldStatus: existingCheckpoint.status,
+              newStatus: body.status,
+              notes: body.notes,
+            },
+          });
+        } catch (error) {
+          if (this._isCheckpointRecordNotFoundError(error)) {
+            throw new NotFoundError(`Checkpoint with id ${id}`);
+          }
+
+          throw error;
+        }
 
         await _invalidateCheckpointCache(id);
 
@@ -537,22 +558,30 @@ export class CheckpointsService {
           throw new NotFoundError(`Checkpoint with id ${id}`);
         }
 
-        await this.repo.deleteByIdWithAudit(id, {
-          actorId: adminInfo.id,
-          action: 'deleted',
-          oldValues: {
-            name: checkpoint.name,
-            area: checkpoint.area,
-            road: checkpoint.road,
-            city: checkpoint.city,
-            description: checkpoint.description,
-            latitude: this._toComparableValue(checkpoint.latitude),
-            longitude: this._toComparableValue(checkpoint.longitude),
-            status: checkpoint.status,
-            createdBy: checkpoint.createdBy ?? null,
-          },
-          newValues: null,
-        });
+        try {
+          await this.repo.deleteByIdWithAudit(id, {
+            actorId: adminInfo.id,
+            action: 'deleted',
+            oldValues: {
+              name: checkpoint.name,
+              area: checkpoint.area,
+              road: checkpoint.road,
+              city: checkpoint.city,
+              description: checkpoint.description,
+              latitude: this._toComparableValue(checkpoint.latitude),
+              longitude: this._toComparableValue(checkpoint.longitude),
+              status: checkpoint.status,
+              createdBy: checkpoint.createdBy ?? null,
+            },
+            newValues: null,
+          });
+        } catch (error) {
+          if (this._isCheckpointRecordNotFoundError(error)) {
+            throw new NotFoundError(`Checkpoint with id ${id}`);
+          }
+
+          throw error;
+        }
 
         await _invalidateCheckpointCache(id);
       }
