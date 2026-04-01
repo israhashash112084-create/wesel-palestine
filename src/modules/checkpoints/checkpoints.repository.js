@@ -1,9 +1,7 @@
 import { prisma, prismaTransaction, query } from '#database/db.js';
 import {
-  distanceBetween,
   findNearestCandidateWithinRadiusMeters,
   getBoundingBoxByRadiusMeters,
-  kilometersToMeters,
 } from '#shared/utils/geo.js';
 
 const CHECKPOINT_REPO_ERROR_CODES = {
@@ -315,7 +313,7 @@ export class CheckpointsRepository {
     };
   }
 
-  async _findNearbyDistanceFirst({
+  async _findNearbyWithSql({
     originLat,
     originLng,
     minLat,
@@ -326,10 +324,18 @@ export class CheckpointsRepository {
     radiusMeters,
     skip,
     take,
+    sortBy,
     sortOrder,
   }) {
-    const distanceOrder = sortOrder === 'desc' ? 'DESC' : 'ASC';
-    const idOrder = sortOrder === 'desc' ? 'DESC' : 'ASC';
+    const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
+    const orderByMap = {
+      distance: 'distance_meters',
+      createdAt: 'created_at',
+      name: 'name',
+      status: 'status',
+    };
+    const orderByColumn = orderByMap[sortBy] ?? orderByMap.distance;
+    const orderByClause = `${orderByColumn} ${orderDirection}, id ${orderDirection}`;
 
     const distanceExpression = `
       6371000 * 2 * ASIN(
@@ -377,7 +383,7 @@ export class CheckpointsRepository {
       SELECT *
       FROM candidates
       WHERE distance_meters <= $8
-      ORDER BY distance_meters ${distanceOrder}, id ${idOrder}
+      ORDER BY ${orderByClause}
       OFFSET $9
       LIMIT $10
     `;
@@ -467,63 +473,20 @@ export class CheckpointsRepository {
       radiusMeters
     );
 
-    const where = {
-      latitude: {
-        gte: minLat,
-        lte: maxLat,
-      },
-      longitude: {
-        gte: minLng,
-        lte: maxLng,
-      },
-      ...(status ? { status } : {}),
-    };
-
-    if (sortBy === 'distance') {
-      return this._findNearbyDistanceFirst({
-        originLat,
-        originLng,
-        minLat,
-        maxLat,
-        minLng,
-        maxLng,
-        status,
-        radiusMeters,
-        skip,
-        take,
-        sortOrder,
-      });
-    }
-
-    const candidates = await prisma.checkpoint.findMany({
-      where,
-      select: this._baseSelect(),
+    return this._findNearbyWithSql({
+      originLat,
+      originLng,
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+      status,
+      radiusMeters,
+      skip,
+      take,
+      sortBy,
+      sortOrder,
     });
-
-    const nearby = candidates
-      .map((checkpoint) => {
-        const distanceMeters = kilometersToMeters(
-          distanceBetween(
-            originLat,
-            originLng,
-            Number(checkpoint.latitude),
-            Number(checkpoint.longitude)
-          )
-        );
-
-        return {
-          ...checkpoint,
-          distanceMeters,
-        };
-      })
-      .filter((checkpoint) => checkpoint.distanceMeters <= radiusMeters);
-
-    const sortedNearby = this._sortNearbyCheckpoints(nearby, sortBy, sortOrder);
-
-    return {
-      checkpoints: sortedNearby.slice(skip, skip + take),
-      total: sortedNearby.length,
-    };
   }
 
   async createWithAudit({ data, audit, duplicateGuard }) {
