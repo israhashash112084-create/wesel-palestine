@@ -1,7 +1,9 @@
 import { prisma, prismaTransaction } from '#database/db.js';
 import {
+  distanceBetween,
   findNearestCandidateWithinRadiusMeters,
   getBoundingBoxByRadiusMeters,
+  kilometersToMeters,
 } from '#shared/utils/geo.js';
 
 export class CheckpointsRepository {
@@ -148,6 +150,30 @@ export class CheckpointsRepository {
     };
   }
 
+  _sortNearbyCheckpoints(checkpoints, sortBy, sortOrder) {
+    const direction = sortOrder === 'desc' ? -1 : 1;
+
+    return [...checkpoints].sort((left, right) => {
+      let compare = 0;
+
+      if (sortBy === 'distance') {
+        compare = left.distanceMeters - right.distanceMeters;
+      } else if (sortBy === 'createdAt') {
+        compare = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+      } else if (sortBy === 'name') {
+        compare = left.name.localeCompare(right.name);
+      } else if (sortBy === 'status') {
+        compare = left.status.localeCompare(right.status);
+      }
+
+      if (compare !== 0) {
+        return compare * direction;
+      }
+
+      return (left.id - right.id) * direction;
+    });
+  }
+
   async findMany({
     status,
     search,
@@ -233,6 +259,59 @@ export class CheckpointsRepository {
     return {
       id: nearest.candidate.id,
       distanceMeters: nearest.distanceMeters,
+    };
+  }
+
+  async findNearby({ lat, lng, radiusMeters, status, skip, take, sortBy, sortOrder }) {
+    const originLat = Number(lat);
+    const originLng = Number(lng);
+
+    const { minLat, maxLat, minLng, maxLng } = getBoundingBoxByRadiusMeters(
+      originLat,
+      originLng,
+      radiusMeters
+    );
+
+    const where = {
+      latitude: {
+        gte: minLat,
+        lte: maxLat,
+      },
+      longitude: {
+        gte: minLng,
+        lte: maxLng,
+      },
+      ...(status ? { status } : {}),
+    };
+
+    const candidates = await prisma.checkpoint.findMany({
+      where,
+      select: this._baseSelect(),
+    });
+
+    const nearby = candidates
+      .map((checkpoint) => {
+        const distanceMeters = kilometersToMeters(
+          distanceBetween(
+            originLat,
+            originLng,
+            Number(checkpoint.latitude),
+            Number(checkpoint.longitude)
+          )
+        );
+
+        return {
+          ...checkpoint,
+          distanceMeters,
+        };
+      })
+      .filter((checkpoint) => checkpoint.distanceMeters <= radiusMeters);
+
+    const sortedNearby = this._sortNearbyCheckpoints(nearby, sortBy, sortOrder);
+
+    return {
+      checkpoints: sortedNearby.slice(skip, skip + take),
+      total: sortedNearby.length,
     };
   }
 

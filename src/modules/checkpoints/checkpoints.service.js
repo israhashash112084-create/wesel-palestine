@@ -122,6 +122,28 @@ export class CheckpointsService {
     };
   }
 
+  async getNearbyCheckpoints(filters) {
+    const { lat, lng, radiusMeters, status, page, limit, sortBy, sortOrder } = filters;
+
+    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+
+    const { checkpoints, total } = await this.repo.findNearby({
+      lat,
+      lng,
+      radiusMeters,
+      status,
+      skip,
+      take,
+      sortBy,
+      sortOrder,
+    });
+
+    return {
+      checkpoints,
+      pagination: buildPaginationMeta(total),
+    };
+  }
+
   async createCheckpoint(adminInfo, body) {
     const { name, area, road, city, description, latitude, longitude, status } = body;
 

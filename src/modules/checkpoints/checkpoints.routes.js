@@ -13,6 +13,7 @@ import {
   createCheckpointSchema,
   updateCheckpointSchema,
   updateCheckpointStatusSchema,
+  nearbyCheckpointsQuerySchema,
   checkpointStatusHistoryQuerySchema,
 } from './checkpoints.validator.js';
 
@@ -33,6 +34,13 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     authenticate,
     validateRequest(listCheckpointsSchema, 'query'),
     checkpointsController.getAllCheckpoints
+  );
+
+  router.get(
+    '/nearby',
+    authenticate,
+    validateRequest(nearbyCheckpointsQuerySchema, 'query'),
+    checkpointsController.getNearbyCheckpoints
   );
 
   router.get(

@@ -106,6 +106,23 @@ export const updateCheckpointStatusSchema = Joi.object({
   notes: Joi.string().max(500).optional(),
 });
 
+export const nearbyCheckpointsQuerySchema = Joi.object({
+  lat: latitudeBounds.required().messages({
+    'any.required': 'Latitude is required',
+  }),
+  lng: longitudeBounds.required().messages({
+    'any.required': 'Longitude is required',
+  }),
+  radiusMeters: Joi.number().integer().min(1).max(50000).default(500),
+  status: Joi.string()
+    .valid(...checkpointStatuses)
+    .optional(),
+  page: pageQuerySchema,
+  limit: Joi.number().integer().min(1).max(50).default(10),
+  sortBy: Joi.string().valid('distance', 'createdAt', 'name', 'status').default('distance'),
+  sortOrder: Joi.string().valid('asc', 'desc').default('asc'),
+});
+
 export const checkpointStatusHistoryQuerySchema = Joi.object({
   changedBy: Joi.string()
     .pattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
