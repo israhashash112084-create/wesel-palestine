@@ -5,15 +5,15 @@ import {
   limitQuerySchema,
   sortOrderQuerySchema,
   positiveIntegerIdSchema,
-  westBankLatitudeSchema,
-  westBankLongitudeSchema,
+  latitudeSchema,
+  longitudeSchema,
 } from '#shared/utils/query-validator.js';
 
 const trafficStatuses = Object.values(TRAFFIC_STATUSES);
 
-const latitudeBounds = westBankLatitudeSchema;
+const latitudeBounds = latitudeSchema;
 
-const longitudeBounds = westBankLongitudeSchema;
+const longitudeBounds = longitudeSchema;
 
 export const listCheckpointsSchema = Joi.object({
   status: Joi.string()
