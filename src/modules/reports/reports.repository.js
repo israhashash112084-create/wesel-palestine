@@ -2,8 +2,8 @@ import { prisma, query } from '#database/db.js';
 import { distanceBetween } from '#shared/utils/geo.js';
 
 const DUPLICATE_RADIUS_KM = 0.5; // 500m
-const DUPLICATE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
-const USER_TIME_WINDOW_MS = 60 * 60 * 1000;
+const DUPLICATE_TIME_WINDOW_MS = 60 * 60 * 1000;
+const USER_TIME_WINDOW_MS = 30 * 60 * 1000;
 
 export class ReportsRepository {
   _userSelect() {
@@ -27,7 +27,6 @@ export class ReportsRepository {
       area: true,
       road: true,
       city: true,
-
       user: this._userSelect(),
     };
   }
@@ -35,9 +34,6 @@ export class ReportsRepository {
   _reportListSelect() {
     return {
       ...this._reportSelect(),
-      area: true,
-      road: true,
-      city: true,
       description: true,
     };
   }
@@ -47,8 +43,6 @@ export class ReportsRepository {
       ...this._reportListSelect(),
       rejectReason: true,
       userId: true,
-      duplicateOf: true,
-      incidentId: true,
       checkpoint: {
         select: {
           id: true,
@@ -78,6 +72,8 @@ export class ReportsRepository {
         proposedCheckpointStatus: data.proposedCheckpointStatus ?? null,
         duplicateOf: data.duplicateOf ?? null,
         incidentId: data.incidentId ?? null,
+        status: data.status ?? undefined,
+        rejectReason: data.rejectReason ?? null,
       },
       select: this._reportSelect(),
     });
@@ -112,12 +108,9 @@ export class ReportsRepository {
       prisma.report.count({ where }),
     ]);
 
-    const cleanedReports = reports.map((report) => {
-      const filteredReport = Object.fromEntries(
-        Object.entries(report).filter(([, value]) => value !== null)
-      );
-      return filteredReport;
-    });
+    const cleanedReports = reports.map((report) =>
+      Object.fromEntries(Object.entries(report).filter(([, value]) => value !== null))
+    );
 
     return { reports: cleanedReports, total };
   }
@@ -126,27 +119,27 @@ export class ReportsRepository {
     locationLat,
     locationLng,
     type,
-    area,
     excludeId = null,
     checkpointId,
     proposedCheckpointStatus,
   }) {
     if (checkpointId && proposedCheckpointStatus) {
       const windowSeconds = this._msToSeconds(DUPLICATE_TIME_WINDOW_MS);
+
       const rows = await query(
         `
-        SELECT id
-        FROM reports
-        WHERE checkpoint_id = $1
-          AND proposed_checkpoint_status = $2
-          AND type = $3
-          AND status IN ('pending', 'verified')
-          AND duplicate_of IS NULL
-          AND created_at > NOW() - ($4 || ' seconds')::INTERVAL
-          AND ($5::int IS NULL OR id != $5)
-        ORDER BY created_at DESC
-        LIMIT 1
-        `,
+      SELECT id
+      FROM reports
+      WHERE checkpoint_id = $1
+        AND proposed_checkpoint_status = $2
+        AND type = $3
+        AND status IN ('pending', 'verified')
+        AND duplicate_of IS NULL
+        AND created_at > NOW() - ($4 || ' seconds')::INTERVAL
+        AND ($5::int IS NULL OR id != $5)
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
         [checkpointId, proposedCheckpointStatus, type, windowSeconds, excludeId]
       );
 
@@ -154,18 +147,18 @@ export class ReportsRepository {
     }
 
     const windowSeconds = this._msToSeconds(DUPLICATE_TIME_WINDOW_MS);
+
     const rows = await query(
       `
-      SELECT id, location_lat, location_lng, type, status
-      FROM   reports
-      WHERE  type            = $1
-        AND  status          IN ('pending', 'verified')
-        AND area             =$3
-        AND  duplicate_of    IS NULL
-        AND  created_at      > NOW() - ($2 || ' seconds')::INTERVAL
-        AND ($4::int IS NULL OR id != $4)
-      `,
-      [type, windowSeconds, area, excludeId]
+    SELECT id, location_lat, location_lng
+    FROM reports
+    WHERE type = $1
+      AND status IN ('pending', 'verified')
+      AND duplicate_of IS NULL
+      AND created_at > NOW() - ($2 || ' seconds')::INTERVAL
+      AND ($3::int IS NULL OR id != $3)
+    `,
+      [type, windowSeconds, excludeId]
     );
 
     return this._findNearest(rows.rows, locationLat, locationLng, DUPLICATE_RADIUS_KM);
@@ -176,12 +169,12 @@ export class ReportsRepository {
     locationLat,
     locationLng,
     type,
-    area,
     checkpointId,
     proposedCheckpointStatus,
   }) {
     if (checkpointId && proposedCheckpointStatus) {
       const windowSeconds = this._msToSeconds(USER_TIME_WINDOW_MS);
+
       const rows = await query(
         `
       SELECT id
@@ -202,17 +195,17 @@ export class ReportsRepository {
     }
 
     const windowSeconds = this._msToSeconds(USER_TIME_WINDOW_MS);
+
     const rows = await query(
       `
-    SELECT id, type, status, location_lat, location_lng, created_at
-    FROM   reports
-    WHERE  user_id     = $1
-      AND  type        = $2
-      AND  status      != 'rejected'
-      AND area =$4
-      AND  created_at  > NOW() - ($3 || ' seconds')::INTERVAL
+    SELECT id, location_lat, location_lng
+    FROM reports
+    WHERE user_id = $1
+      AND type = $2
+      AND status != 'rejected'
+      AND created_at > NOW() - ($3 || ' seconds')::INTERVAL
     `,
-      [userId, type, windowSeconds, area]
+      [userId, type, windowSeconds]
     );
 
     return this._findNearest(rows.rows, locationLat, locationLng, DUPLICATE_RADIUS_KM);
@@ -220,32 +213,25 @@ export class ReportsRepository {
 
   async findUserDuplicateForReport(reportId, userId) {
     return prisma.report.findFirst({
-      where: {
-        duplicateOf: reportId,
-        userId: userId,
-      },
+      where: { duplicateOf: reportId, userId },
       select: { id: true },
     });
   }
 
   async update(id, data) {
-    return prisma.report.update({
-      where: { id },
-      data,
-    });
+    return prisma.report.update({ where: { id }, data });
   }
+
   async updateMany(where, data) {
-    return prisma.report.updateMany({
-      where,
-      data,
-    });
+    return prisma.report.updateMany({ where, data });
   }
 
   async incrementReportConfidenceScore(reportId, increment = 1) {
-    await prisma.report.update({
+    const result = await prisma.report.update({
       where: { id: reportId },
       data: { confidenceScore: { increment } },
     });
+    return result;
   }
 
   async upsertVote(reportId, userId, vote) {
@@ -295,6 +281,7 @@ export class ReportsRepository {
   async increaseReportOwnersScore(reportId) {
     return this.adjustReportOwnersScore(reportId, 1);
   }
+
   async decreaseReportOwnersScore(reportId) {
     return this.adjustReportOwnersScore(reportId, -1);
   }
