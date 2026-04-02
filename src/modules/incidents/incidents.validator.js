@@ -7,10 +7,9 @@ import {
   pageQuerySchema,
   limitQuerySchema,
   sortOrderQuerySchema,
-  positiveIntegerSchema,
   positiveIntegerIdSchema,
-  westBankLatitudeSchema,
-  westBankLongitudeSchema,
+  latitudeSchema,
+  longitudeSchema,
 } from '#shared/utils/query-validator.js';
 
 const incidentTypes = Object.values(INCIDENT_TYPES);
@@ -18,16 +17,16 @@ const incidentSeverities = Object.values(INCIDENT_SEVERITIES);
 const trafficStatuses = Object.values(TRAFFIC_STATUSES);
 const incidentStatuses = Object.values(INCIDENT_STATUSES);
 
-const locationLatSchema = westBankLatitudeSchema.messages({
+const locationLatSchema = latitudeSchema.messages({
   'any.required': 'Location latitude is required',
 });
 
-const locationLngSchema = westBankLongitudeSchema.messages({
+const locationLngSchema = longitudeSchema.messages({
   'any.required': 'Location longitude is required',
 });
 
 export const createIncidentSchema = Joi.object({
-  checkpointId: positiveIntegerSchema.optional(),
+  checkpointId: positiveIntegerIdSchema.optional(),
   locationLat: locationLatSchema.required(),
   locationLng: locationLngSchema.required(),
   area: Joi.string().max(100).optional(),
@@ -77,8 +76,8 @@ export const listIncidentsSchema = Joi.object({
   trafficStatus: Joi.string()
     .valid(...trafficStatuses)
     .optional(),
-  checkpointId: positiveIntegerSchema.optional(),
-  reportedBy: positiveIntegerSchema.optional(),
+  checkpointId: positiveIntegerIdSchema.optional(),
+  reportedBy: positiveIntegerIdSchema.optional(),
   fromDate: Joi.date().iso().optional(),
   toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
     'date.greater': 'toDate must be greater than fromDate',
@@ -97,10 +96,10 @@ export const incidentHistoryQuerySchema = Joi.object({
 });
 
 export const nearbyIncidentsSchema = Joi.object({
-  lat: westBankLatitudeSchema.required().messages({
+  lat: latitudeSchema.required().messages({
     'any.required': 'Latitude is required',
   }),
-  lng: westBankLongitudeSchema.required().messages({
+  lng: longitudeSchema.required().messages({
     'any.required': 'Longitude is required',
   }),
   radiusMeters: Joi.number().integer().min(1).max(50000).default(500),
