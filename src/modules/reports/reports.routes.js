@@ -8,10 +8,7 @@ import {
   authorize,
 } from '#shared/middlewares/auth.middleware.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
-import {
-  reportSubmitLimiter,
-  areaReportLimiter,
-} from '#shared/middlewares/rate-limit.middleware.js';
+import { reportSubmitLimiter } from '#shared/middlewares/rate-limit.middleware.js';
 import {
   ReportSchema,
   updateReportSchema,
@@ -29,9 +26,8 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  reportSubmitLimiter,
   validateRequest(ReportSchema, 'body'),
-  areaReportLimiter,
+  reportSubmitLimiter,
   reportsController.submitReport
 );
 router.get(
