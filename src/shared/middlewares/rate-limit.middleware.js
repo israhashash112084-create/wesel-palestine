@@ -105,53 +105,40 @@ export const checkAreaReportLimit = async (userId, area) => {
   if (!area || typeof area !== 'string') {
     return;
   }
-
+  
+const buildAreaReportLimitKey = (userId, area) => {
   const normalizedArea = area.trim().toLowerCase();
-  const key = `area_report_limit:${userId}:${normalizedArea}`;
+  return `area_report_limit:${userId}:${normalizedArea}`;
+};
 
-  let count;
+export const ensureAreaReportLimit = async (userId, area) => {
+  if (!area || typeof area !== 'string') return;
 
-  try {
-    count = await redisClient.incr(key);
-  } catch (error) {
-    logger.warn('[rate-limit] area report limiter degraded: redis unavailable', {
-      userId,
-      area: normalizedArea,
-      error: error.message,
-    });
-    return;
-  }
+  const key = buildAreaReportLimitKey(userId, area);
+  const rawCount = await redisClient.get(key);
+  const count = Number(rawCount ?? 0);
+  const maxAllowed = Number(env.AREA_REPORT_LIMIT_MAX);
 
-  try {
-    if (count === 1) {
-      await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
-    }
+  if (count >= maxAllowed) {
+    const ttl = await redisClient.ttl(key);
+    const hoursLeft = ttl > 0 ? Math.ceil(ttl / 3600) : 0;
 
-    if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
-      const ttl = await redisClient.ttl(key);
-      const hoursLeft = Math.ceil(ttl / 3600);
-
-      throw new ConflictError(
-        `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} reports for "${area}". ` +
-          `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
-      );
-    }
-  } catch (error) {
-    if (error instanceof ConflictError) {
-      throw error;
-    }
-
-    logger.warn('[rate-limit] area report limiter degraded after increment', {
-      userId,
-      area: normalizedArea,
-      error: error.message,
-    });
+    throw new ConflictError(
+      `You have reached the maximum of ${maxAllowed} reports for "${area}". ` +
+        `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
+    );
   }
 };
 
-export const areaReportLimiter = async (req, _res, next) => {
-  await checkAreaReportLimit(req.userInfo.id, req.body.area);
-  next();
+export const incrementAreaReportLimit = async (userId, area) => {
+  if (!area || typeof area !== 'string') return;
+
+  const key = buildAreaReportLimitKey(userId, area);
+  const count = await redisClient.incr(key);
+
+  if (count === 1) {
+    await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+  }
 };
 
 export const checkAreaIncidentLimit = async (userId, area) => {
