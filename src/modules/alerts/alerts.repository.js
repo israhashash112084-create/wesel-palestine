@@ -2,43 +2,55 @@ import { prisma } from '#database/db.js';
 
 export class AlertsRepository {
   async createSubscription({ userId, areaLat, areaLng, radiusKm, category }) {
-    return await prisma.alertSubscription.create({
+    return await prisma.alert_subscriptions.create({
       data: {
-        userId,
-        areaLat,
-        areaLng,
-        radiusKm,
+        user_id: userId,
+        area_lat: areaLat,
+        area_lng: areaLng,
+        radius_km: radiusKm,
         category,
+         updated_at: new Date(),
       },
     });
   }
+
 
   async findSubscriptionsByUserId(userId) {
-    return await prisma.alertSubscription.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
+  return await prisma.alert_subscriptions.findMany({
+    where: { user_id: userId },
+    orderBy: { created_at: 'desc' },
+  });
+}
 
   async findActiveSubscriptionById(id, userId) {
-    return await prisma.alertSubscription.findFirst({
-      where: {
-        id,
-        userId,
-        isActive: true,
-      },
-    });
-  }
+  return await prisma.alert_subscriptions.findFirst({
+    where: {
+      id,
+      user_id: userId,
+      is_active: true,
+    },
+  });
+}
 
-  async updateSubscription(id, userId, data) {
-    return await prisma.alertSubscription.updateMany({
-      where: { id, userId },
-      data,
-    });
-  }
+ async updateSubscription(id, userId, data) {
+  const mappedData = {};
+
+  if (data.areaLat !== undefined) mappedData.area_lat = data.areaLat;
+  if (data.areaLng !== undefined) mappedData.area_lng = data.areaLng;
+  if (data.radiusKm !== undefined) mappedData.radius_km = data.radiusKm;
+  if (data.category !== undefined) mappedData.category = data.category;
+  if (data.isActive !== undefined) mappedData.is_active = data.isActive;
+
+  mappedData.updated_at = new Date();
+
+  return await prisma.alert_subscriptions.updateMany({
+    where: { id, user_id: userId },
+    data: mappedData,
+  });
+}
 
   async deactivateSubscription(id, userId) {
-    return await prisma.alertSubscription.updateMany({
+    return await prisma.alert_subscriptions.updateMany({
       where: { id, userId },
       data: { isActive: false },
     });
