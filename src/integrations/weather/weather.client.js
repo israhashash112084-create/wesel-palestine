@@ -27,16 +27,15 @@ export const getWeather = async (location) => {
 
     const data = await response.json();
 
-    const condition   = data.weather?.[0]?.main        ?? 'Clear';
+    const condition = data.weather?.[0]?.main ?? 'Clear';
     const description = data.weather?.[0]?.description ?? 'clear sky';
 
     return {
       condition,
       description,
-      isHazardous:   _isHazardous(condition),
+      isHazardous: _isHazardous(condition),
       responseTimeMs,
     };
-
   } catch (error) {
     logger.warn(`Weather request failed for ${location.lat},${location.lng}: ${error.message}`);
     throw error;

@@ -14,6 +14,7 @@ export const INCIDENT_TYPES = {
   ROAD_DAMAGE: 'road_damage',
   PROTEST: 'protest',
   CONSTRUCTION: 'construction',
+  CHECKPOINT_STATUS_UPDATE: 'checkpoint_status_update',
   OTHER: 'other',
 };
 
@@ -22,6 +23,34 @@ export const INCIDENT_STATUSES = {
   VERIFIED: 'verified',
   REJECTED: 'rejected',
   CLOSED: 'closed',
+};
+
+export const INCIDENT_STATUS_TRANSITIONS = {
+  [INCIDENT_STATUSES.PENDING]: [
+    INCIDENT_STATUSES.VERIFIED,
+    INCIDENT_STATUSES.REJECTED,
+    INCIDENT_STATUSES.CLOSED,
+  ],
+  [INCIDENT_STATUSES.VERIFIED]: [INCIDENT_STATUSES.REJECTED, INCIDENT_STATUSES.CLOSED],
+  [INCIDENT_STATUSES.REJECTED]: [INCIDENT_STATUSES.VERIFIED, INCIDENT_STATUSES.CLOSED],
+  [INCIDENT_STATUSES.CLOSED]: [],
+};
+
+export const INCIDENT_MUTABLE_FIELDS_BY_STATUS = {
+  [INCIDENT_STATUSES.PENDING]: [
+    'severity',
+    'description',
+    'trafficStatus',
+    'locationLat',
+    'locationLng',
+    'area',
+    'road',
+    'city',
+    'type',
+  ],
+  [INCIDENT_STATUSES.VERIFIED]: ['description', 'trafficStatus'],
+  [INCIDENT_STATUSES.REJECTED]: ['description'],
+  [INCIDENT_STATUSES.CLOSED]: [],
 };
 
 export const INCIDENT_SEVERITIES = {
@@ -48,9 +77,36 @@ export const VOTE_VALUES = {
 };
 
 export const API_SERVICES = {
-  OSRM:           'osrm',
+  OSRM: 'osrm',
   OPENWEATHERMAP: 'openweathermap',
 };
 
+export const CHECKPOINT_STATUSES = {
+  OPEN: 'open',
+  SLOW: 'slow',
+  CLOSED: 'closed',
+  UNKNOWN: 'unknown',
+};
 
-
+export const CHECKPOINT_STATUS_TRANSITIONS = {
+  [CHECKPOINT_STATUSES.OPEN]: [
+    CHECKPOINT_STATUSES.SLOW,
+    CHECKPOINT_STATUSES.CLOSED,
+    CHECKPOINT_STATUSES.UNKNOWN,
+  ],
+  [CHECKPOINT_STATUSES.SLOW]: [
+    CHECKPOINT_STATUSES.OPEN,
+    CHECKPOINT_STATUSES.CLOSED,
+    CHECKPOINT_STATUSES.UNKNOWN,
+  ],
+  [CHECKPOINT_STATUSES.CLOSED]: [
+    CHECKPOINT_STATUSES.OPEN,
+    CHECKPOINT_STATUSES.SLOW,
+    CHECKPOINT_STATUSES.UNKNOWN,
+  ],
+  [CHECKPOINT_STATUSES.UNKNOWN]: [
+    CHECKPOINT_STATUSES.OPEN,
+    CHECKPOINT_STATUSES.SLOW,
+    CHECKPOINT_STATUSES.CLOSED,
+  ],
+};

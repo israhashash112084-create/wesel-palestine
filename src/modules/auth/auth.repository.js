@@ -28,6 +28,27 @@ export class AuthRepository {
   }
 
   /**
+   * Find a user profile by ID with only safe public fields.
+   * @param {string} id
+   */
+  async findProfileById(id) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        confidenceScore: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return user ?? null;
+  }
+
+  /**
    * Create a new user.
    * @param {{ firstName: string, lastName: string, email: string, passwordHash: string, role?: string }} data
    */
@@ -86,7 +107,7 @@ export class AuthRepository {
    * @param {string} tokenHash
    */
   async deleteRefreshToken(tokenHash) {
-    await prisma.refreshToken.delete({
+    await prisma.refreshToken.deleteMany({
       where: { tokenHash },
     });
   }
@@ -132,5 +153,21 @@ export class AuthRepository {
         where: { id: { in: toEvict.map((t) => t.id) } },
       });
     }
+  }
+
+  /**
+   * Build auth-owned session stats only.
+   * @param {string} userId
+   */
+  async getSessionStats(userId) {
+    const activeSessions = await prisma.refreshToken.count({
+      where: { userId, expiresAt: { gt: new Date() } },
+    });
+
+    return {
+      counts: {
+        sessionsActive: activeSessions,
+      },
+    };
   }
 }

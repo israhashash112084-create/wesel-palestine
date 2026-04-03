@@ -1,5 +1,4 @@
 export class RoutesController {
-
   /**
    * @param {import('./routes.service.js').RoutesService} routesService
    */
@@ -8,16 +7,16 @@ export class RoutesController {
   }
 
   estimate = async (req, res) => {
-    const result = await this.routesService.estimateRoute(req.body , req.userInfo.id);
+    const result = await this.routesService.estimateRoute(req.body, req.userInfo.id);
 
     res.status(200).json({
       success: true,
-      data:    result,
+      data: result,
     });
   };
 
- getHistory = async (req, res) => {
-  const result = await this.routesService.getRouteHistory(req.query, req.userInfo.id);
+  getHistory = async (req, res) => {
+    const result = await this.routesService.getRouteHistory(req.query, req.userInfo.id);
 
   res.status(200).json({
     success: true,

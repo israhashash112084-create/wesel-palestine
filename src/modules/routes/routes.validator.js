@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import Joi from 'joi';
 
 const coordinateSchema = Joi.object({
@@ -23,15 +24,11 @@ export const estimateRouteSchema = Joi.object({
     'any.required': 'to location is required',
   }),
 
-  avoid_checkpoints: Joi.array()
-    .items(Joi.number().integer().positive())
-    .default([]),
+  avoid_checkpoints: Joi.array().items(Joi.number().integer().positive()).default([]),
 
-  avoid_areas: Joi.array()         
-    .items(Joi.string().trim().min(2))
-    .default([]),
+  avoid_areas: Joi.array().items(Joi.string().trim().min(2)).default([]),
 
-    include_geometry:  Joi.boolean().default(true), 
+  include_geometry: Joi.boolean().default(true),
 });
 
 export const routeHistorySchema = Joi.object({

@@ -39,6 +39,6 @@ export const errorHandler = (err, req, res, next) => {
 
   return res.status(500).json({
     success: false,
-    message: 'Something went wrong. Please try again later.',
+    message: error.message || 'Something went wrong. Please try again later.',
   });
 };

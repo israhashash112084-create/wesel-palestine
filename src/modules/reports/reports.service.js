@@ -6,28 +6,26 @@ import {
 } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { UserRoles } from '#shared/constants/roles.js';
-import { REPORT_STATUSES } from '#shared/constants/enums.js';
-import { IncidentsService } from '#modules/incidents/incidents.service.js';
-import { IncidentsRepository } from '#modules/incidents/incidents.repository.js';
+import { INCIDENT_TYPES, REPORT_STATUSES } from '#shared/constants/enums.js';
+import { normalizeLocation, buildLocationQuery } from '#shared/utils/location-normalizer.js';
 import { env } from '#config/env.js';
 import { scheduleAutoReject } from '#modules/reports/jobs/report.queue.js';
+import { checkAreaReportLimit } from '#shared/middlewares/rate-limit.middleware.js';
 import redisClient from '#shared/utils/radis.js';
+import { logger } from '#shared/utils/logger.js';
 
 const MIN_VOTES_REQUIRED = 4;
 const AUTO_VERIFY_ABOVE = 0.7;
 const AUTO_REJECT_BELOW = 0.3;
-
-const incidentsRepository = new IncidentsRepository();
-const incidentsService = new IncidentsService(incidentsRepository);
+const CACHE_TTL_LIST = 120;
+const CACHE_TTL_SINGLE = 180;
+const CACHE_VERSION_KEY = 'reports:list:version';
 
 const systemUser = () => ({ id: env.SYSTEM_USER_ID });
 
-const CACHE_TTL_LIST = 60;
-const CACHE_TTL_SINGLE = 120;
-
 const _cacheKey = {
-  list: (filters) => `reports:list:${JSON.stringify(filters)}`,
-  single: (id) => `reports:single:${id}`,
+  list: (filters, version) => `reports:list:v${version}:${JSON.stringify(filters)}`,
+  single: (id, scope) => `reports:single:${id}:${scope}`,
 };
 
 const _getCache = async (key) => {
@@ -43,29 +41,91 @@ const _setCache = async (key, value, ttl) => {
   try {
     await redisClient.set(key, JSON.stringify(value), { EX: ttl });
   } catch {
-    /* fail silently — cache is best-effort */
+    /* best-effort */
+  }
+};
+
+const _getListCacheVersion = async () => {
+  try {
+    const version = await redisClient.get(CACHE_VERSION_KEY);
+    return version ?? '1';
+  } catch {
+    return '1';
   }
 };
 
 const _invalidateReportCache = async (reportId) => {
   try {
-    // Delete single report cache
-    await redisClient.del(_cacheKey.single(reportId));
-    // Delete all list caches — pattern delete
-    const keys = await redisClient.keys('reports:list:*');
-    if (keys.length > 0) await redisClient.del(keys);
-  } catch {
-    /* fail silently */
+    await redisClient.del(
+      _cacheKey.single(reportId, 'anon'),
+      _cacheKey.single(reportId, 'auth'),
+      _cacheKey.single(reportId, 'mod')
+    );
+
+    await redisClient.incr(CACHE_VERSION_KEY);
+  } catch (error) {
+    logger.warn('[reports] cache invalidation degraded', {
+      reportId,
+      error: error.message,
+    });
   }
 };
 
 export class ReportsService {
-  constructor(reportsRepository) {
+  /**
+   * @param {import('./reports.repository.js').ReportsRepository} reportsRepository
+   * @param {{
+   *  incidentsService: import('#modules/incidents/incidents.service.js').IncidentsService,
+   *  checkpointsService: import('#modules/checkpoints/checkpoints.service.js').CheckpointsService,
+   * }} deps
+   */
+  constructor(reportsRepository, deps) {
     this.repo = reportsRepository;
+    this.incidentsService = deps.incidentsService;
+    this.checkpointsService = deps.checkpointsService;
   }
+
+  async getUserStats(userId) {
+    return await this.repo.getUserStats(userId);
+  }
+
+  async getReportsByIncidentId(incidentId, filters = {}) {
+    return this.repo.findByIncidentId(incidentId, filters);
+  }
+
   _isModerator(userInfo) {
     return userInfo?.role === UserRoles.MODERATOR || userInfo?.role === UserRoles.ADMIN;
   }
+
+  _isCheckpointStatusReport(report) {
+    return report?.type === INCIDENT_TYPES.CHECKPOINT_STATUS_UPDATE;
+  }
+
+  _isCheckpointStatusInput(body) {
+    return (
+      body?.type === INCIDENT_TYPES.CHECKPOINT_STATUS_UPDATE ||
+      (body?.checkpointId !== undefined && body?.proposedCheckpointStatus !== undefined)
+    );
+  }
+
+  _toReportSummary(report, incidentIdOverride) {
+    return {
+      id: report.id,
+      status: report.status,
+      type: report.type,
+      checkpointId: report.checkpointId ?? null,
+      proposedCheckpointStatus: report.proposedCheckpointStatus ?? null,
+      incidentId: incidentIdOverride ?? report.incidentId ?? null,
+      duplicateOf: report.duplicateOf ?? null,
+      locationLat: report.locationLat ?? null,
+      locationLng: report.locationLng ?? null,
+      area: report.area ?? null,
+      road: report.road ?? null,
+      city: report.city ?? null,
+      createdAt: report.createdAt,
+    };
+  }
+
   _buildVoteInfo(report, userInfo) {
     const voteUrl = `POST /api/v1/reports/${report.id}/vote`;
 
@@ -78,31 +138,138 @@ export class ReportsService {
       };
     }
 
-    const isModerator = this._isModerator(userInfo);
-    const isOwner = userInfo.id === report.userId;
+    if (this._isModerator(userInfo) || userInfo.id === report.userId) return {};
+    if (report.status === REPORT_STATUSES.VERIFIED) return {};
 
-    if (isModerator || isOwner || report.status === REPORT_STATUSES.VERIFIED) {
-      return {};
+    return { voteGuide: { step1: `Vote: ${voteUrl}` } };
+  }
+
+  _calcScoreChange(isNew, previousVote, currentVote) {
+    if (isNew) return currentVote === 'up' ? 1 : -1;
+    if (previousVote !== currentVote) return currentVote === 'up' ? 2 : -2;
+    return 0;
+  }
+
+  async _normalizeCheckpointReportInput(body) {
+    const checkpoint = await this.checkpointsService.getCheckpointById(body.checkpointId);
+    if (checkpoint.status === body.proposedCheckpointStatus) {
+      throw new BadRequestError(
+        'Proposed status matches the current checkpoint status. Choose a different status'
+      );
     }
 
     return {
-      voteGuide: {
-        step1: `Then vote: ${voteUrl}`,
-      },
+      ...body,
+      type: INCIDENT_TYPES.CHECKPOINT_STATUS_UPDATE,
+      severity: body.severity ?? 'low',
+      description: body.description ?? 'Checkpoint status update report',
+      locationLat: Number(checkpoint.latitude),
+      locationLng: Number(checkpoint.longitude),
+      area: checkpoint.area ?? null,
+      road: checkpoint.road ?? null,
+      city: checkpoint.city ?? null,
     };
   }
-  async submitReport(body, userId) {
-    const { locationLat, locationLng, area, type, severity, description } = body;
+
+  async _applyCheckpointStatusFromReport(report, actorId, reason) {
+    if (!this._isCheckpointStatusReport(report)) return;
+    if (!report.checkpointId || !report.proposedCheckpointStatus) return;
+
+    try {
+      await this.checkpointsService.updateCheckpointStatus(
+        report.checkpointId,
+        {
+          status: report.proposedCheckpointStatus,
+          notes: reason ?? `Status updated from report #${report.id}`,
+        },
+        { id: actorId }
+      );
+    } catch (err) {
+      if (
+        err instanceof BadRequestError &&
+        err.message === 'Checkpoint status is already set to the requested value'
+      )
+        return;
+      throw err;
+    }
+  }
+
+  async _resolveLocation(location) {
+    let result;
+    try {
+      result = await normalizeLocation(location);
+    } catch (err) {
+      throw new BadRequestError(err.message);
+    }
+
+    logger.debug('[reports] Location resolved', { output: buildLocationQuery(result) });
+
+    if (location.area && result.area) {
+      const userArea = location.area.trim().toLowerCase();
+      const resolvedArea = result.area.toLowerCase();
+      if (!resolvedArea.includes(userArea) && !userArea.includes(resolvedArea)) {
+        throw new BadRequestError(
+          `Area "${location.area}" does not match the geocoded location. Detected area: "${result.area}"`
+        );
+      }
+    }
+
+    return result;
+  }
+
+  async submitReport(body, userInfo) {
+    if (this._isCheckpointStatusInput(body)) {
+      const payload = await this._normalizeCheckpointReportInput(body);
+      return this._persistReport(payload, userInfo);
+    }
+
+    const normalizedLocation = await this._resolveLocation(body.location);
+
+    const payload = {
+      ...body,
+      locationLat: normalizedLocation.latitude,
+      locationLng: normalizedLocation.longitude,
+      area: normalizedLocation.area,
+      road: normalizedLocation.road,
+      city: normalizedLocation.city,
+    };
+
+    return this._persistReport(payload, userInfo);
+  }
+
+  async _persistReport(payload, userInfo) {
+    const userId = userInfo.id;
+    const isModerator = this._isModerator(userInfo);
+
+    const {
+      locationLat,
+      locationLng,
+      area,
+      road,
+      city,
+      type,
+      severity,
+      description,
+      checkpointId,
+      proposedCheckpointStatus,
+    } = payload;
+
+    if (area) {
+      await checkAreaReportLimit(userId, area);
+    }
+
     const userDuplicate = await this.repo.findUserDuplicateReport({
       userId,
       locationLat,
       locationLng,
       type,
       area,
+      checkpointId,
+      proposedCheckpointStatus,
     });
 
     if (userDuplicate) {
-      throw new ConflictError(`You already submitted a similar report (#${userDuplicate.id}) `);
+      throw new ConflictError(`You already submitted a similar report (#${userDuplicate.id})`);
     }
 
     const duplicate = await this.repo.findNearbyDuplicate({
@@ -110,6 +277,8 @@ export class ReportsService {
       locationLng,
       type,
       area,
+      checkpointId,
+      proposedCheckpointStatus,
     });
 
     const incidentId = duplicate
@@ -120,9 +289,13 @@ export class ReportsService {
             locationLat,
             locationLng,
             area,
+            road,
+            city,
             type,
             severity,
             description,
+            checkpointId,
+            proposedCheckpointStatus,
           })
         )?.id ?? null);
 
@@ -131,9 +304,13 @@ export class ReportsService {
       locationLat,
       locationLng,
       area,
+      road,
+      city,
       type,
       severity,
       description,
+      checkpointId: checkpointId ?? null,
+      proposedCheckpointStatus: proposedCheckpointStatus ?? null,
       duplicateOf: duplicate ? duplicate.id : null,
       incidentId,
     });
@@ -141,20 +318,80 @@ export class ReportsService {
     if (duplicate) {
       await this.repo.incrementReportConfidenceScore(duplicate.id, 1);
     }
+
     if (!duplicate) {
       await scheduleAutoReject(report.id);
+    }
+
+    if (isModerator) {
+      await this._approveReport(
+        report.id,
+        {
+          ...report,
+          incidentId,
+          checkpointId: report.checkpointId ?? checkpointId ?? null,
+          proposedCheckpointStatus:
+            report.proposedCheckpointStatus ?? proposedCheckpointStatus ?? null,
+        },
+        userId,
+        'Auto-verified because it was submitted by moderator/admin'
+      );
+
+      const verifiedReport = await this.repo.findById(report.id);
+      await _invalidateReportCache(report.id);
+
+      return {
+        report: this._toReportSummary(verifiedReport, incidentId),
+        editUrl: `PUT /api/v1/reports/${report.id}`,
+        message: duplicate
+          ? `Your report was linked to an existing report (#${duplicate.id}) and auto-verified.`
+          : 'Report submitted successfully and auto-verified.',
+      };
     }
 
     await _invalidateReportCache(report.id);
 
     return {
-      report,
+      report: this._toReportSummary(report, incidentId),
       editUrl: `PUT /api/v1/reports/${report.id}`,
       message: duplicate
-        ? `Your report has been received and linked to an existing report (#${duplicate.id}) in the same area. Thank you for confirming!`
-        : 'Your report has been successfully submitted and is now pending review. Thank you!',
+        ? `Your report is linked to an existing report (#${duplicate.id}) in the same area. Thank you for confirming!`
+        : 'Report submitted successfully and is pending review. Thank you!',
     };
   }
+
+  _formatReportDetail(report) {
+    return {
+      id: report.id,
+      type: report.type,
+      severity: report.severity,
+      status: report.status,
+      description: report.description,
+      createdAt: report.createdAt,
+      confidenceScore: report.confidenceScore ?? 0,
+      duplicateOf: report.duplicateOf ?? null,
+      incidentId: report.incidentId ?? null,
+
+      location: {
+        latitude: report.locationLat ?? null,
+        longitude: report.locationLng ?? null,
+        area: report.area ?? null,
+        road: report.road ?? null,
+        city: report.city ?? null,
+      },
+
+      checkpointUpdate: report.checkpointId
+        ? {
+            proposedStatus: report.proposedCheckpointStatus ?? null,
+            checkpoint: report.checkpoint ?? null,
+          }
+        : null,
+
+      user: report.user ?? null,
+      rejectReason: report.rejectReason ?? null,
+    };
+  }
+
   async retrieveReports(filters, userInfo) {
     const { type, area, page, limit, sortBy, sortOrder } = filters;
     const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
@@ -163,16 +400,16 @@ export class ReportsService {
     let statusFilter;
     if (filters.status) {
       if (!isModerator && filters.status !== REPORT_STATUSES.PENDING) {
-        throw new ForbiddenError('You are not allowed to view reports with this status');
+        throw new ForbiddenError('You are not allowed to filter by this status');
       }
       statusFilter = filters.status;
     } else {
       statusFilter = isModerator ? undefined : { in: [REPORT_STATUSES.PENDING] };
     }
 
-    // Cache key includes role so mods and users get different cached responses
     const role = isModerator ? 'mod' : 'user';
-    const cacheKey = _cacheKey.list({ ...filters, role });
+    const version = await _getListCacheVersion();
+    const cacheKey = _cacheKey.list({ ...filters, role }, version);
     const cached = await _getCache(cacheKey);
     if (cached) return cached;
 
@@ -184,27 +421,23 @@ export class ReportsService {
       take,
       sortBy,
       sortOrder,
+      includeDuplicates: isModerator,
     });
-    const reportsWithVoteInfo = reports.map((report) => ({
-      ...report,
-      ...this._buildVoteInfo(report, userInfo),
-    }));
+
     const result = {
-      reports: reportsWithVoteInfo,
+      reports: reports.map((r) => ({ ...r, ...this._buildVoteInfo(r, userInfo) })),
       pagination: buildPaginationMeta(total),
     };
 
     await _setCache(cacheKey, result, CACHE_TTL_LIST);
     return result;
   }
+
   async getReport(id, userInfo) {
     const isModerator = this._isModerator(userInfo);
+    const scope = isModerator ? 'mod' : userInfo ? 'auth' : 'anon';
+    const cacheKey = _cacheKey.single(id, scope);
 
-    // Cache key includes userId so each user gets their own cached view
-    // (owners see rejectReason, others don't)
-    const cacheKey = _cacheKey.single(
-      `${id}:${userInfo?.id ?? 'anon'}:${isModerator ? 'mod' : 'user'}`
-    );
     const cached = await _getCache(cacheKey);
     if (cached) return cached;
 
@@ -216,12 +449,15 @@ export class ReportsService {
         throw new NotFoundError('Report');
       }
     }
-    const response = { ...report };
+
+    const response = this._formatReportDetail(report);
+
     if (report.status === REPORT_STATUSES.REJECTED && isOwner) {
       response.rejectReason = report.rejectReason;
-    } else if (report.status !== REPORT_STATUSES.REJECTED) {
+    } else {
       delete response.rejectReason;
     }
+
     if (!isModerator && !isOwner && report.status === REPORT_STATUSES.PENDING) {
       Object.assign(response, this._buildVoteInfo(report, userInfo));
     }
@@ -229,192 +465,360 @@ export class ReportsService {
     await _setCache(cacheKey, response, CACHE_TTL_SINGLE);
     return response;
   }
+
   async voteOnReport(reportId, userId, vote) {
     const report = await this._findReportOrThrow(reportId);
-    if (report.userId === userId) throw new ForbiddenError('You cannot vote on your own report');
+
+    if (report.userId === userId) {
+      throw new ForbiddenError('You cannot vote on your own report');
+    }
     if (report.duplicateOf !== null) {
       throw new BadRequestError(
-        `This is a duplicate report. Please vote on the original report (#${report.duplicateOf})`
+        `This is a duplicate report. Vote on the original (#${report.duplicateOf})`
       );
     }
     if (report.status !== REPORT_STATUSES.PENDING) {
       throw new BadRequestError(`Cannot vote on a report with status: ${report.status}`);
     }
+
     const userDuplicate = await this.repo.findUserDuplicateForReport(reportId, userId);
     if (userDuplicate) {
       throw new ForbiddenError(
-        `You already submitted a duplicate report (#${userDuplicate.id}) for this report. Your confirmation already counts`
+        `You already submitted a duplicate report (#${userDuplicate.id}) — your confirmation already counts`
       );
     }
+
     const { isNew, previousVote, currentVote } = await this.repo.upsertVote(reportId, userId, vote);
     const scoreChange = this._calcScoreChange(isNew, previousVote, currentVote);
+
     if (scoreChange !== 0) {
       const newScore = Math.max(0, report.confidenceScore + scoreChange);
       await this.repo.update(reportId, { confidenceScore: newScore });
     }
+
     await this._checkAutoDecision(report);
     await _invalidateReportCache(reportId);
+
     return {
-      message: isNew ? 'Vote submitted successfully' : 'Vote updated successfully',
+      message: isNew ? 'Vote submitted' : 'Vote updated',
       vote: currentVote,
       reportId,
     };
   }
-  async _checkAutoDecision(report) {
-    const { upCount, total } = await this.repo.getVoteCounts(report.id);
-    if (total < MIN_VOTES_REQUIRED) return;
-    const upRatio = upCount / total;
-    if (upRatio >= AUTO_VERIFY_ABOVE) {
-      const reason = `Auto-verified: ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
-      await this._approveReport(report.id, report, systemUser().id, reason);
-    } else if (upRatio < AUTO_REJECT_BELOW) {
-      const reason = `Auto-rejected: only ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
-      await this._rejectReport(report.id, report, systemUser().id, reason);
-    }
-  }
-  async _createIncidentFromReport(report) {
-    const incident = await incidentsService.createIncident(
-      { id: report.userId },
-      {
-        locationLat: report.locationLat,
-        locationLng: report.locationLng,
-        area: report.area,
-        type: report.type,
-        severity: report.severity,
-        description: report.description,
-        checkpointId: null,
-        trafficStatus: 'unknown',
-      }
-    );
 
-    return incident;
-  }
   async updateReport(reportId, body, userId) {
     const report = await this._findReportOrThrow(reportId);
+
     if (report.userId !== userId) {
       throw new ForbiddenError('You can only edit your own reports');
     }
     if (report.status !== REPORT_STATUSES.PENDING) {
       throw new BadRequestError(
-        `Cannot edit a report with status: ${report.status}. Only pending reports can be edited`
+        `Cannot edit a ${report.status} report. Only pending reports can be edited`
       );
     }
-    const { locationLat, locationLng, area, type, severity, description } = body;
+    if (this._isCheckpointStatusInput(body)) {
+      const payload = await this._normalizeCheckpointReportInput(body);
+      return this._persistReportUpdate(reportId, report, payload);
+    }
+
+    let resolvedLocation;
+
+    if (body.location) {
+      resolvedLocation = await this._resolveLocation(body.location);
+    } else {
+      resolvedLocation = {
+        latitude: Number(report.locationLat),
+        longitude: Number(report.locationLng),
+        area: report.area,
+        road: report.road,
+        city: report.city,
+      };
+    }
+
+    const payload = {
+      locationLat: resolvedLocation.latitude,
+      locationLng: resolvedLocation.longitude,
+      area: resolvedLocation.area,
+      road: resolvedLocation.road,
+      city: resolvedLocation.city,
+      type: body.type ?? report.type,
+      severity: body.severity ?? report.severity,
+      description: body.description ?? report.description,
+      checkpointId: body.checkpointId ?? report.checkpointId ?? null,
+      proposedCheckpointStatus:
+        body.proposedCheckpointStatus ?? report.proposedCheckpointStatus ?? null,
+    };
+
+    return this._persistReportUpdate(reportId, report, payload);
+  }
+
+  async _persistReportUpdate(reportId, existingReport, payload) {
+    const {
+      locationLat,
+      locationLng,
+      area,
+      road,
+      city,
+      type,
+      severity,
+      description,
+      checkpointId,
+      proposedCheckpointStatus,
+    } = payload;
+
     const newDuplicate = await this.repo.findNearbyDuplicate({
       locationLat,
       locationLng,
       type,
-      excludeId: reportId,
       area,
+      excludeId: reportId,
+      checkpointId,
+      proposedCheckpointStatus,
     });
-    const newDuplicateOf = newDuplicate ? newDuplicate.id : null;
-    if (report.duplicateOf !== newDuplicateOf) {
-      if (report.duplicateOf) {
-        await this.repo.incrementReportConfidenceScore(report.duplicateOf, -1);
+
+    const newDuplicateOf = newDuplicate?.id ?? null;
+
+    if (existingReport.duplicateOf !== newDuplicateOf) {
+      if (existingReport.duplicateOf) {
+        await this.repo.incrementReportConfidenceScore(existingReport.duplicateOf, -1);
       }
       if (newDuplicateOf) {
         await this.repo.incrementReportConfidenceScore(newDuplicateOf, 1);
       }
     }
+
     const updatedReport = await this.repo.update(reportId, {
       locationLat,
       locationLng,
       area: area ?? null,
+      road: road ?? null,
+      city: city ?? null,
       type,
       severity,
       description,
+      checkpointId,
+      proposedCheckpointStatus,
       duplicateOf: newDuplicateOf,
     });
 
     await _invalidateReportCache(reportId);
 
     return {
-      report: updatedReport,
+      report: this._toReportSummary(updatedReport),
       message: newDuplicateOf
-        ? `Report updated and linked to existing report (#${newDuplicateOf}) in the same area`
+        ? `Report updated and linked to existing report (#${newDuplicateOf})`
         : 'Report updated successfully',
     };
   }
+
   async moderateReport(reportId, body, moderatorId) {
     const report = await this._findReportOrThrow(reportId);
+
     if (report.duplicateOf !== null) {
       throw new BadRequestError(
-        `This is a duplicate report. Moderate the original report (#${report.duplicateOf}) instead`
+        `This is a duplicate. Moderate the original report (#${report.duplicateOf})`
       );
     }
     if (report.status === REPORT_STATUSES.VERIFIED) {
-      throw new BadRequestError(
-        'Cannot moderate a verified report. The report has already been verified and an incident has been created'
-      );
+      throw new BadRequestError('Report is already verified');
     }
-
-    if (report.status === REPORT_STATUSES.REJECTED && body.action === 'reject') {
+    if (report.status === REPORT_STATUSES.REJECTED && body.action === 'rejected') {
       throw new BadRequestError('Report is already rejected');
     }
 
-    if (body.action === 'approve') {
+    if (body.action === 'approved') {
       await this._approveReport(reportId, report, moderatorId, body.reason ?? null);
-      return { message: 'Report approved and incident approved successfully' };
+      return { message: 'Report approved and incident verified' };
     }
 
     await this._rejectReport(reportId, report, moderatorId, body.reason);
-    return { message: 'Report rejected successfully' };
+    return { message: 'Report rejected' };
   }
+
   async _findReportOrThrow(id) {
     const report = await this.repo.findById(id);
     if (!report) throw new NotFoundError('Report');
     return report;
   }
-  _calcScoreChange(isNew, previousVote, currentVote) {
-    if (isNew) return currentVote === 'up' ? 1 : -1;
-    if (previousVote !== currentVote) return currentVote === 'up' ? 2 : -2;
-    return 0;
+
+  async _rollbackModerationFailure({
+    reportId,
+    action,
+    snapshot,
+    scoreDelta,
+    scoreAdjusted,
+    auditLogId,
+    originalError,
+  }) {
+    const rollbackFailures = [];
+
+    if (snapshot) {
+      try {
+        await this.repo.restoreModerationSnapshot(snapshot);
+      } catch (rollbackError) {
+        rollbackFailures.push(`state:${rollbackError.message}`);
+      }
+    }
+
+    if (scoreAdjusted && scoreDelta !== 0) {
+      try {
+        await this.repo.adjustReportOwnersScore(reportId, -scoreDelta);
+      } catch (rollbackError) {
+        rollbackFailures.push(`score:${rollbackError.message}`);
+      }
+    }
+
+    if (auditLogId) {
+      try {
+        await this.repo.deleteAuditLogById(auditLogId);
+      } catch (rollbackError) {
+        rollbackFailures.push(`audit:${rollbackError.message}`);
+      }
+    }
+
+    if (rollbackFailures.length > 0) {
+      logger.error('[reports] moderation compensation failed', {
+        reportId,
+        action,
+        originalError: originalError?.message,
+        rollbackFailures,
+      });
+    }
   }
+
   async _approveReport(reportId, report, moderatorId, reason) {
-    await this.repo.update(reportId, {
-      status: 'verified',
-      moderatedBy: moderatorId,
-      moderatedAt: new Date(),
-      rejectReason: null,
-    });
+    const moderatedAt = new Date();
+    const snapshot = await this.repo.getModerationSnapshot(reportId);
+    const actorId = moderatorId ?? systemUser().id;
+    let scoreAdjusted = false;
+    let auditLogId;
 
-    await this.repo.createAuditLog({ reportId, moderatorId, action: 'approved', reason });
+    try {
+      await this.repo.applyModerationOutcome(reportId, {
+        status: REPORT_STATUSES.VERIFIED,
+        moderatedBy: moderatorId ?? null,
+        moderatedAt,
+        rejectReason: null,
+      });
 
-    await this.repo.updateMany(
-      { duplicateOf: reportId },
-      { status: 'verified', moderatedAt: new Date(), rejectReason: null }
-    );
+      if (report.incidentId) {
+        await this.incidentsService.verifyIncident(
+          report.incidentId,
+          { id: actorId },
+          reason ?? 'Verified via report'
+        );
+      }
 
-    if (report.incidentId) {
-      const actor = moderatorId ? { id: moderatorId } : { id: systemUser().id };
-      await incidentsService.verifyIncident(report.incidentId, actor, reason ?? 'Auto-verified');
+      await this._applyCheckpointStatusFromReport(
+        report,
+        actorId,
+        reason ?? 'Status verified via report moderation'
+      );
+
+      await this.repo.increaseReportOwnersScore(reportId);
+      scoreAdjusted = true;
+
+      const auditLog = await this.repo.createAuditLog({
+        reportId,
+        moderatorId,
+        action: 'approved',
+        reason,
+      });
+      auditLogId = auditLog.id;
+
+      await _invalidateReportCache(reportId);
+    } catch (error) {
+      await this._rollbackModerationFailure({
+        reportId,
+        action: 'approved',
+        snapshot,
+        scoreDelta: 1,
+        scoreAdjusted,
+        auditLogId,
+        originalError: error,
+      });
+
+      throw error;
     }
-
-    await this.repo.increaseReportOwnersScore(reportId);
-    await _invalidateReportCache(reportId);
   }
+
   async _rejectReport(reportId, report, moderatorId, reason) {
-    await this.repo.update(reportId, {
-      status: 'rejected',
-      rejectReason: reason,
-      moderatedBy: moderatorId,
-      moderatedAt: new Date(),
-    });
+    const moderatedAt = new Date();
+    const snapshot = await this.repo.getModerationSnapshot(reportId);
+    const actorId = moderatorId ?? systemUser().id;
+    let scoreAdjusted = false;
+    let auditLogId;
 
-    await this.repo.createAuditLog({ reportId, moderatorId, action: 'rejected', reason });
+    try {
+      await this.repo.applyModerationOutcome(reportId, {
+        status: REPORT_STATUSES.REJECTED,
+        moderatedBy: moderatorId ?? null,
+        moderatedAt,
+        rejectReason: reason,
+      });
 
-    await this.repo.updateMany(
-      { duplicateOf: reportId },
-      { status: 'rejected', rejectReason: reason, moderatedAt: new Date() }
-    );
+      if (report.incidentId) {
+        await this.incidentsService.rejectIncident(report.incidentId, { id: actorId });
+      }
 
-    if (report.incidentId) {
-      const actor = moderatorId ? { id: moderatorId } : { id: systemUser().id };
+      await this.repo.decreaseReportOwnersScore(reportId);
+      scoreAdjusted = true;
 
-      await incidentsService.rejectIncident(report.incidentId, actor);
+      const auditLog = await this.repo.createAuditLog({
+        reportId,
+        moderatorId,
+        action: 'rejected',
+        reason,
+      });
+      auditLogId = auditLog.id;
+
+      await _invalidateReportCache(reportId);
+    } catch (error) {
+      await this._rollbackModerationFailure({
+        reportId,
+        action: 'rejected',
+        snapshot,
+        scoreDelta: -1,
+        scoreAdjusted,
+        auditLogId,
+        originalError: error,
+      });
+
+      throw error;
     }
+  }
 
-    await this.repo.decreaseReportOwnersScore(reportId);
-    await _invalidateReportCache(reportId);
+  async _checkAutoDecision(report) {
+    const { upCount, total } = await this.repo.getVoteCounts(report.id);
+    if (total < MIN_VOTES_REQUIRED) return;
+
+    const upRatio = upCount / total;
+
+    if (upRatio >= AUTO_VERIFY_ABOVE) {
+      const reason = `Auto-verified: ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
+      await this._approveReport(report.id, report, systemUser().id, reason);
+    } else if (upRatio < AUTO_REJECT_BELOW) {
+      const reason = `Auto-rejected: ${upCount}/${total} upvotes (${Math.round(upRatio * 100)}%)`;
+      await this._rejectReport(report.id, report, systemUser().id, reason);
+    }
+  }
+
+  async _createIncidentFromReport(report) {
+    return this.incidentsService.createIncident(
+      { id: report.userId },
+      {
+        locationLat: report.locationLat,
+        locationLng: report.locationLng,
+        area: report.area,
+        road: report.road,
+        city: report.city,
+        type: report.type,
+        severity: report.severity,
+        description: report.description,
+        checkpointId: report.checkpointId ?? null,
+        trafficStatus: report.proposedCheckpointStatus ?? 'unknown',
+      }
+    );
   }
 }
