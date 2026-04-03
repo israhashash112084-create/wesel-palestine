@@ -8,6 +8,10 @@ export class AlertsService {
     this.alertsRepository = alertsRepository;
   }
 
+  async getUserStats(userId) {
+    return await this.alertsRepository.getUserStats(userId);
+  }
+
   _mapIncidentTypeToCategory(type) {
     const supportedCategories = ['checkpoint', 'closure', 'delay', 'accident', 'weather_hazard'];
 

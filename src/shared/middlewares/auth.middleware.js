@@ -1,8 +1,8 @@
 import { env } from '#config/env.js';
 import jwt from 'jsonwebtoken';
-import { UnauthorizedError } from '#shared/utils/errors.js';
+import { ForbiddenError, UnauthorizedError } from '#shared/utils/errors.js';
 
-const _verifyToken  = (req) => {
+const _verifyToken = (req) => {
   const authHeader = req.headers?.authorization ?? req.headers?.Authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
 
@@ -15,18 +15,17 @@ const _verifyToken  = (req) => {
 };
 
 export const authenticate = (req, res, next) => {
-  const decoded = _verifyToken (req);
+  const decoded = _verifyToken(req);
   if (!decoded) throw new UnauthorizedError('No authentication token provided');
   req.userInfo = decoded;
   next();
 };
 
 export const optionalAuthenticate = (req, res, next) => {
-  const decoded = _verifyToken (req);
+  const decoded = _verifyToken(req);
   if (decoded) req.userInfo = decoded;
-  next(); 
+  next();
 };
-
 
 /**
  * Middleware factory that checks if the authenticated user has
@@ -40,7 +39,7 @@ export const optionalAuthenticate = (req, res, next) => {
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.userInfo || !roles.includes(req.userInfo.role)) {
-      throw new UnauthorizedError('Insufficient permissions');
+      throw new ForbiddenError('Insufficient permissions');
     }
     next();
   };

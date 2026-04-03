@@ -30,14 +30,28 @@ const MIN_VOTES_REQUIRED = 4;
 const AUTO_VERIFY_ABOVE = 0.7;
 const AUTO_REJECT_BELOW = 0.3;
 
-const incidentsService = new IncidentsService(new IncidentsRepository());
-const checkpointsService = new CheckpointsService(new CheckpointsRepository());
-
 const systemUser = () => ({ id: env.SYSTEM_USER_ID });
 
 export class ReportsService {
-  constructor(reportsRepository) {
+  /**
+   * @param {import('./reports.repository.js').ReportsRepository} reportsRepository
+   * @param {{
+   *  incidentsService: import('#modules/incidents/incidents.service.js').IncidentsService,
+   *  checkpointsService: import('#modules/checkpoints/checkpoints.service.js').CheckpointsService,
+   * }} deps
+   */
+  constructor(reportsRepository, deps) {
     this.repo = reportsRepository;
+    this.incidentsService = deps.incidentsService;
+    this.checkpointsService = deps.checkpointsService;
+  }
+
+  async getUserStats(userId) {
+    return await this.repo.getUserStats(userId);
+  }
+
+  async getReportsByIncidentId(incidentId, filters = {}) {
+    return this.repo.findByIncidentId(incidentId, filters);
   }
 
   _isModerator(userInfo) {
@@ -155,7 +169,7 @@ export class ReportsService {
   }
 
   async _normalizeCheckpointReportInput(body) {
-    const checkpoint = await checkpointsService.getCheckpointById(body.checkpointId);
+    const checkpoint = await this.checkpointsService.getCheckpointById(body.checkpointId);
     if (checkpoint.status === body.proposedCheckpointStatus) {
       throw new BadRequestError(
         'Proposed status matches the current checkpoint status. Choose a different status'
@@ -180,7 +194,7 @@ export class ReportsService {
     if (!report.checkpointId || !report.proposedCheckpointStatus) return;
 
     try {
-      await checkpointsService.updateCheckpointStatus(
+      await this.checkpointsService.updateCheckpointStatus(
         report.checkpointId,
         {
           status: report.proposedCheckpointStatus,
@@ -823,6 +837,7 @@ export class ReportsService {
     if (report.status === REPORT_STATUSES.REJECTED && body.action === 'reject') {
       throw new BadRequestError('Report is already rejected');
     }
+  }
 
     if (body.action === 'approve') {
       const approved = await this._approveReport(report, moderatorId, body.reason ?? null);
