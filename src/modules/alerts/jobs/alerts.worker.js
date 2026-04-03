@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
 import { logger } from '#shared/utils/logger.js';
-import { bullMQConnection } from '#modules/alerts/alerts.queue.js';
-import { alertsProcessor } from '#modules/alerts/alerts.processor.js';
+import { bullMQConnection } from '#modules/alerts/jobs/alerts.queue.js';
+import { alertsProcessor } from '#modules/alerts/jobs/alerts.processor.js';
 
 let worker = null;
 

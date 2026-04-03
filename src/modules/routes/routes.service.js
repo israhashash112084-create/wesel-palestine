@@ -127,6 +127,10 @@ export class RoutesService {
     this.routesRepository = routesRepository;
   }
 
+  async getUserStats(userId) {
+    return await this.routesRepository.getUserStats(userId);
+  }
+
   async estimateRoute({ from, to, avoid_checkpoints, avoid_areas, include_geometry }, userId) {
     if (from.lat === to.lat && from.lng === to.lng) {
       throw new BadRequestError('Origin and destination cannot be the same');

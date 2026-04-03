@@ -8,6 +8,10 @@ export class AlertsService {
     this.alertsRepository = alertsRepository;
   }
 
+  async getUserStats(userId) {
+    return await this.alertsRepository.getUserStats(userId);
+  }
+
   _mapIncidentTypeToCategory(type) {
     const supportedCategories = ['checkpoint', 'closure', 'delay', 'accident', 'weather_hazard'];
 
@@ -116,7 +120,7 @@ export class AlertsService {
       return { skipped: true, reason: 'Incident not found', incidentId };
     }
 
-    if (incident.status !== 'verified') {
+    if (incident.status !== INCIDENT_STATUSES.VERIFIED) {
       return { skipped: true, reason: 'Incident is not verified', incidentId };
     }
 
@@ -181,7 +185,91 @@ export class AlertsService {
     };
   }
 
+async createReportStatusNotifications(report) {
+  const recipients = [];
+
+  if (report.userId) {
+    recipients.push(report.userId);
+  }
+
+  const duplicates = await this.alertsRepository.findDuplicateReports(report.id);
+
+  for (const duplicate of duplicates) {
+    if (duplicate.userId && !recipients.includes(duplicate.userId)) {
+      recipients.push(duplicate.userId);
+    }
+  }
+
+  if (recipients.length === 0) {
+    return { skipped: true, reason: 'No recipients found' };
+  }
+
+  const message =
+    report.status === 'verified'
+      ? `Your report #${report.id} has been approved.`
+      : `Your report #${report.id} has been rejected.`;
+
+  await Promise.all(
+    recipients.map((userId) =>
+      this.alertsRepository.createReportNotification({
+        userId,
+        reportId: report.id,
+        message,
+        status: 'pending',
+      })
+    )
+  );
+
+  return {
+    success: true,
+    notificationsCreated: recipients.length,
+  };
+}
+
+
+
+
   async handleNewIncident(incident) {
     return await this.processIncidentAlerts(incident.id);
   }
+  async createReportStatusNotifications(report) {
+  const recipients = [];
+
+  if (report.userId) {
+    recipients.push(report.userId);
+  }
+
+  const duplicates = await this.alertsRepository.findDuplicateReports(report.id);
+
+  for (const duplicate of duplicates) {
+    if (duplicate.userId && !recipients.includes(duplicate.userId)) {
+      recipients.push(duplicate.userId);
+    }
+  }
+
+  if (recipients.length === 0) {
+    return { skipped: true, reason: 'No recipients found' };
+  }
+
+  const message =
+    report.status === 'verified'
+      ? `Your report #${report.id} has been approved.`
+      : `Your report #${report.id} has been rejected.`;
+
+  await Promise.all(
+    recipients.map((userId) =>
+      this.alertsRepository.createReportNotification({
+        userId,
+        reportId: report.id,
+        message,
+        status: 'pending',
+      })
+    )
+  );
+
+  return {
+    success: true,
+    notificationsCreated: recipients.length,
+  };
+}
 }

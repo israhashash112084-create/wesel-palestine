@@ -16,9 +16,74 @@ const hashToken = (token) => crypto.createHash('sha256').update(token).digest('h
 export class AuthService {
   /**
    * @param {import('./auth.repository.js').AuthRepository} authRepository
+   * @param {{
+   *  reportsService?: { getUserStats: (userId: string) => Promise<object> },
+   *  incidentsService?: { getUserStats: (userId: string, role: string) => Promise<object> },
+   *  routesService?: { getUserStats: (userId: string) => Promise<object> },
+   *  alertsService?: { getUserStats: (userId: string) => Promise<object> },
+   * }} [deps]
    */
-  constructor(authRepository) {
+  constructor(authRepository, deps = {}) {
     this.authRepository = authRepository;
+    this.reportsService = deps.reportsService;
+    this.incidentsService = deps.incidentsService;
+    this.routesService = deps.routesService;
+    this.alertsService = deps.alertsService;
+  }
+
+  _emptyStats() {
+    return {
+      counts: {
+        reportsSubmitted: 0,
+        votesCast: 0,
+        incidentsReported: 0,
+        incidentsModerated: 0,
+        activeSubscriptions: 0,
+        inactiveSubscriptions: 0,
+        sessionsActive: 0,
+        routeQueries: 0,
+      },
+      routeHistory: {
+        totalDelayMinutes: 0,
+        totalDistanceKm: 0,
+        avgDelayMinutes: 0,
+        avgDistanceKm: 0,
+        totalQueries: 0,
+      },
+      breakdowns: {
+        reportsByStatus: {},
+        reportsByType: {},
+        votesByValue: {},
+        reportedIncidentsByStatus: {},
+        routeHistoryByMode: { primary: 0, fallback: 0 },
+        activeSubscriptionsByCategory: {},
+        moderatedIncidentsByStatus: {},
+      },
+    };
+  }
+
+  _mergeStats(base, patch) {
+    if (!patch || typeof patch !== 'object') {
+      return;
+    }
+
+    if (patch.counts && typeof patch.counts === 'object') {
+      Object.assign(base.counts, patch.counts);
+    }
+
+    if (patch.routeHistory && typeof patch.routeHistory === 'object') {
+      Object.assign(base.routeHistory, patch.routeHistory);
+    }
+
+    if (patch.breakdowns && typeof patch.breakdowns === 'object') {
+      for (const [key, value] of Object.entries(patch.breakdowns)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          base.breakdowns[key] = { ...(base.breakdowns[key] ?? {}), ...value };
+        } else {
+          base.breakdowns[key] = value;
+        }
+      }
+    }
   }
 
   /**
@@ -104,6 +169,35 @@ export class AuthService {
   }
 
   /**
+   * Retrieve authenticated user profile and stats.
+   * @param {string} userId
+   */
+  async me(userId) {
+    const user = await this.authRepository.findProfileById(userId);
+    if (!user) {
+      throw new UnauthorizedError('User not found');
+    }
+
+    const [sessionStats, reportsStats, incidentsStats, routesStats, alertsStats] =
+      await Promise.all([
+        this.authRepository.getSessionStats(user.id),
+        this.reportsService?.getUserStats?.(user.id) ?? Promise.resolve({}),
+        this.incidentsService?.getUserStats?.(user.id, user.role) ?? Promise.resolve({}),
+        this.routesService?.getUserStats?.(user.id) ?? Promise.resolve({}),
+        this.alertsService?.getUserStats?.(user.id) ?? Promise.resolve({}),
+      ]);
+
+    const stats = this._emptyStats();
+    this._mergeStats(stats, sessionStats);
+    this._mergeStats(stats, reportsStats);
+    this._mergeStats(stats, incidentsStats);
+    this._mergeStats(stats, routesStats);
+    this._mergeStats(stats, alertsStats);
+
+    return { user, stats };
+  }
+
+  /**
    * Internal helper: sign JWTs and upsert refresh token hash to DB.
    * If the device already has an active session, its token is replaced.
    * Otherwise a new session row is created.
@@ -132,6 +226,8 @@ export class AuthService {
       deviceInfo.deviceId,
       deviceInfo.deviceName
     );
+
+    await this.authRepository.enforceSessionCap(user.id);
 
     return { accessToken, refreshToken };
   }

@@ -36,14 +36,13 @@ export const getOsrmRoutes = async (from, to) => {
     //const route = data.routes[0];
 
     return {
-      routes: data.routes.map((route)=> ({
-       distanceKm:      parseFloat((route.distance / 1000).toFixed(2)),
-       durationMinutes: parseFloat((route.duration / 60).toFixed(2)),
-       geometry:        route.geometry,
+      routes: data.routes.map((route) => ({
+        distanceKm: parseFloat((route.distance / 1000).toFixed(2)),
+        durationMinutes: parseFloat((route.duration / 60).toFixed(2)),
+        geometry: route.geometry,
       })),
-      responseTimeMs
+      responseTimeMs,
     };
-
   } catch (error) {
     logger.warn(`OSRM request failed: ${error.message}`);
     throw error;
@@ -85,7 +84,8 @@ export const getOsrmRouteViaWaypoint = async (from, waypoint, to) => {
     };
   } catch (error) {
     logger.warn(
-      `OSRM waypoint request failed for waypoint (${waypoint.lat},${waypoint.lng} ):${error.message}`);
+      `OSRM waypoint request failed for waypoint (${waypoint.lat},${waypoint.lng} ):${error.message}`
+    );
     throw error;
   }
 };

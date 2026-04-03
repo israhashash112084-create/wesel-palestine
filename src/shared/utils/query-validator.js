@@ -17,6 +17,9 @@ export const longitudeSchema = Joi.number().min(34.9).max(35.6).messages({
   'number.max': 'longitude must be within West Bank boundaries [34.9, 35.6]',
 });
 
+export const westBankLatitudeSchema = latitudeSchema;
+export const westBankLongitudeSchema = longitudeSchema;
+
 export const locationInputSchema = Joi.object({
   latitude: latitudeSchema.optional(),
   longitude: longitudeSchema.optional(),

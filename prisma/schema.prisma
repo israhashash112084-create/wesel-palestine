@@ -42,7 +42,7 @@ model User {
   moderatedIncidents  Incident[]           @relation("IncidentModerated")
   alertSubscriptions  AlertSubscription[]
   RouteHistory        RouteHistory[]
-
+  reportNotifications ReportNotification[]
   @@map("users")
 }
 
@@ -177,7 +177,7 @@ model Report {
 
   votes     ReportVote[]
   auditLogs ModerationAuditLog[]
-
+  notifications ReportNotification[]
   @@index([incidentId])
   @@index([userId], map: "idx_reports_user_id")
   @@index([status], map: "idx_reports_status")
@@ -361,19 +361,36 @@ model AlertSubscription {
 }
 
 model Alert {
-  id             Int      @id @default(autoincrement())
-  incidentId     Int      @map("incident_id")
-  subscriptionId Int      @map("subscription_id")
-  status         String   @default("pending")
+  id             Int       @id @default(autoincrement())
+  incidentId     Int       @map("incident_id")
+  subscriptionId Int       @map("subscription_id")
+  status         String    @default("pending")
   sentAt         DateTime? @map("sent_at")
-  createdAt      DateTime @default(now()) @map("created_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   incident     Incident          @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   subscription AlertSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
+  @@unique([incidentId, subscriptionId])
   @@index([incidentId], map: "idx_alerts_incident_id")
   @@index([subscriptionId], map: "idx_alerts_subscription_id")
   @@map("alerts")
+}
+
+model ReportNotification {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Uuid
+  reportId  Int      @map("report_id")
+  status    String   @default("pending")
+  message   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  report  Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_report_notifications_user_id")
+  @@index([reportId], map: "idx_report_notifications_report_id")
+  @@map("report_notifications")
 }
 
 enum ModerationAction {

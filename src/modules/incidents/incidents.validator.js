@@ -3,11 +3,11 @@ import { INCIDENT_TYPES } from '#shared/constants/enums.js';
 import { INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
 import { TRAFFIC_STATUSES } from '#shared/constants/enums.js';
 import { INCIDENT_STATUSES } from '#shared/constants/enums.js';
+import { REPORT_STATUSES } from '#shared/constants/enums.js';
 import {
   pageQuerySchema,
   limitQuerySchema,
   sortOrderQuerySchema,
-  positiveIntegerSchema,
   positiveIntegerIdSchema,
   westBankLatitudeSchema,
   westBankLongitudeSchema,
@@ -17,6 +17,7 @@ const incidentTypes = Object.values(INCIDENT_TYPES);
 const incidentSeverities = Object.values(INCIDENT_SEVERITIES);
 const trafficStatuses = Object.values(TRAFFIC_STATUSES);
 const incidentStatuses = Object.values(INCIDENT_STATUSES);
+const reportStatuses = Object.values(REPORT_STATUSES);
 
 const locationLatSchema = westBankLatitudeSchema.messages({
   'any.required': 'Location latitude is required',
@@ -27,7 +28,7 @@ const locationLngSchema = westBankLongitudeSchema.messages({
 });
 
 export const createIncidentSchema = Joi.object({
-  checkpointId: positiveIntegerSchema.optional(),
+  checkpointId: positiveIntegerIdSchema.optional(),
   locationLat: locationLatSchema.required(),
   locationLng: locationLngSchema.required(),
   area: Joi.string().max(100).optional(),
@@ -77,8 +78,8 @@ export const listIncidentsSchema = Joi.object({
   trafficStatus: Joi.string()
     .valid(...trafficStatuses)
     .optional(),
-  checkpointId: positiveIntegerSchema.optional(),
-  reportedBy: positiveIntegerSchema.optional(),
+  checkpointId: positiveIntegerIdSchema.optional(),
+  reportedBy: positiveIntegerIdSchema.optional(),
   fromDate: Joi.date().iso().optional(),
   toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
     'date.greater': 'toDate must be greater than fromDate',
@@ -90,10 +91,34 @@ export const listIncidentsSchema = Joi.object({
 });
 
 export const incidentHistoryQuerySchema = Joi.object({
+  changedBy: positiveIntegerIdSchema.optional(),
+  oldStatus: Joi.string()
+    .valid(...incidentStatuses)
+    .optional(),
+  newStatus: Joi.string()
+    .valid(...incidentStatuses)
+    .optional(),
+  fromDate: Joi.date().iso().optional(),
+  toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
+    'date.greater': 'toDate must be greater than fromDate',
+  }),
   page: pageQuerySchema,
   limit: limitQuerySchema,
   sortBy: Joi.string().valid('changedAt').default('changedAt'),
   sortOrder: sortOrderQuerySchema,
+});
+
+export const incidentReportsQuerySchema = Joi.object({
+  page: pageQuerySchema,
+  limit: limitQuerySchema,
+  sortBy: Joi.string().valid('createdAt', 'severity', 'status').default('createdAt'),
+  sortOrder: sortOrderQuerySchema,
+  status: Joi.string()
+    .valid(...reportStatuses)
+    .optional(),
+  type: Joi.string()
+    .valid(...incidentTypes)
+    .optional(),
 });
 
 export const nearbyIncidentsSchema = Joi.object({

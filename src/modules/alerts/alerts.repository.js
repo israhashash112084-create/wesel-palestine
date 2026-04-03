@@ -1,60 +1,58 @@
 import { prisma } from '#database/db.js';
+import { toCountMap } from '#shared/utils/count-map.js';
+import { ALERT_STATUSES } from '#shared/constants/enums.js';
 
 export class AlertsRepository {
   async createSubscription({ userId, areaLat, areaLng, radiusKm, category }) {
-    return await prisma.alert_subscriptions.create({
+    return await prisma.alertSubscription.create({
       data: {
-        user_id: userId,
-        area_lat: areaLat,
-        area_lng: areaLng,
-        radius_km: radiusKm,
-        category,
-         updated_at: new Date(),
-      },
+         userId,
+         areaLat,
+         areaLng,
+         radiusKm,
+         category,
+           },
     });
   }
 
 
   async findSubscriptionsByUserId(userId) {
-  return await prisma.alert_subscriptions.findMany({
-    where: { user_id: userId },
-    orderBy: { created_at: 'desc' },
-  });
+  return await prisma.alertSubscription.findMany({
+  where: { userId },
+  orderBy: { createdAt: 'desc' },
+});
 }
 
   async findActiveSubscriptionById(id, userId) {
-  return await prisma.alert_subscriptions.findFirst({
-    where: {
-      id,
-      user_id: userId,
-      is_active: true,
-    },
-  });
+ return await prisma.alertSubscription.findFirst({
+  where: {
+    id,
+    userId,
+    isActive: true,
+  },
+});
 }
 
  async updateSubscription(id, userId, data) {
   const mappedData = {};
+if (data.areaLat !== undefined) mappedData.areaLat = data.areaLat;
+if (data.areaLng !== undefined) mappedData.areaLng = data.areaLng;
+if (data.radiusKm !== undefined) mappedData.radiusKm = data.radiusKm;
+if (data.category !== undefined) mappedData.category = data.category;
+if (data.isActive !== undefined) mappedData.isActive = data.isActive;
 
-  if (data.areaLat !== undefined) mappedData.area_lat = data.areaLat;
-  if (data.areaLng !== undefined) mappedData.area_lng = data.areaLng;
-  if (data.radiusKm !== undefined) mappedData.radius_km = data.radiusKm;
-  if (data.category !== undefined) mappedData.category = data.category;
-  if (data.isActive !== undefined) mappedData.is_active = data.isActive;
-
-  mappedData.updated_at = new Date();
-
-  return await prisma.alert_subscriptions.updateMany({
-    where: { id, user_id: userId },
-    data: mappedData,
-  });
+return await prisma.alertSubscription.updateMany({
+  where: { id, userId },
+  data: mappedData,
+});
 }
 
   async deactivateSubscription(id, userId) {
-    return await prisma.alert_subscriptions.updateMany({
-      where: { id, userId },
-      data: { isActive: false },
-    });
-  }
+  return await prisma.alertSubscription.updateMany({
+    where: { id, userId },
+    data: { isActive: false },
+  });
+}
 
   async findAlertsByUserId(userId) {
     return await prisma.alert.findMany({
@@ -80,7 +78,7 @@ export class AlertsRepository {
         },
       },
       data: {
-        status: 'read',
+        status: ALERT_STATUSES.READ,
       },
     });
   }
@@ -100,13 +98,71 @@ export class AlertsRepository {
     });
   }
 
-  async createAlert({ incidentId, subscriptionId, status = 'pending' }) {
-    return await prisma.alert.create({
-      data: {
+  async createAlert({ incidentId, subscriptionId, status = ALERT_STATUSES.PENDING }) {
+  return await prisma.alert.upsert({
+    where: {
+      incidentId_subscriptionId: {
         incidentId,
         subscriptionId,
-        status,
       },
-    });
+    },
+    update: {
+      status,
+    },
+    create: {
+      incidentId,
+      subscriptionId,
+      status,
+    },
+  });
+}
+
+
+async findDuplicateReports(reportId) {
+  return await prisma.report.findMany({
+    where: { duplicateOf: reportId },
+    select: {
+      id: true,
+      userId: true,
+    },
+  });
+}
+
+async createReportNotification({ userId, reportId, message, status = 'pending' }) {
+  return await prisma.reportNotification.create({
+    data: {
+      userId,
+      reportId,
+      message,
+      status,
+    },
+  });
+}
+
+  async getUserStats(userId) {
+    const [activeSubscriptionsByCategory, activeSubscriptions, inactiveSubscriptions] =
+      await Promise.all([
+        prisma.alertSubscription.groupBy({
+          by: ['category'],
+          where: { userId, isActive: true },
+          _count: { _all: true },
+        }),
+        prisma.alertSubscription.count({
+          where: { userId, isActive: true },
+        }),
+        prisma.alertSubscription.count({
+          where: { userId, isActive: false },
+        }),
+      ]);
+
+    return {
+      counts: {
+        activeSubscriptions,
+        inactiveSubscriptions,
+      },
+      breakdowns: {
+        activeSubscriptionsByCategory: toCountMap(activeSubscriptionsByCategory, 'category'),
+      },
+    };
   }
 }

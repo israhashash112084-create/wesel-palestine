@@ -1,5 +1,6 @@
 import { prisma, query } from '#database/db.js';
 import { distanceBetween } from '#shared/utils/geo.js';
+import { toCountMap } from '#shared/utils/count-map.js';
 
 const DUPLICATE_RADIUS_KM = 0.5; // 500m
 const DUPLICATE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -88,6 +89,39 @@ export class ReportsRepository {
       where: { id },
       select: this._reportDetailSelect(),
     });
+  }
+
+  async findByIncidentId(
+    incidentId,
+    { skip = 0, take = 10, sortBy = 'createdAt', sortOrder = 'desc', status, type } = {}
+  ) {
+    const where = { incidentId };
+
+    if (status) where.status = status;
+    if (type) where.type = type;
+
+    const [reports, total] = await prisma.$transaction([
+      prisma.report.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take,
+        select: {
+          ...this._reportListSelect(),
+          _count: {
+            select: {
+              votes: true,
+            },
+          },
+        },
+      }),
+      prisma.report.count({ where }),
+    ]);
+
+    return {
+      reports,
+      total,
+    };
   }
 
   async findMany({ status, type, area, skip, take, sortBy, sortOrder, includeDuplicates = false }) {
@@ -303,6 +337,41 @@ export class ReportsRepository {
     return prisma.moderationAuditLog.create({
       data: { reportId, moderatorId: moderatorId ?? null, action, reason: reason ?? null },
     });
+  }
+
+  async getUserStats(userId) {
+    const [reportsByStatus, reportsByType, votesByValue, reportsSubmitted, votesCast] =
+      await Promise.all([
+        prisma.report.groupBy({
+          by: ['status'],
+          where: { userId },
+          _count: { _all: true },
+        }),
+        prisma.report.groupBy({
+          by: ['type'],
+          where: { userId },
+          _count: { _all: true },
+        }),
+        prisma.reportVote.groupBy({
+          by: ['vote'],
+          where: { userId },
+          _count: { _all: true },
+        }),
+        prisma.report.count({ where: { userId } }),
+        prisma.reportVote.count({ where: { userId } }),
+      ]);
+
+    return {
+      counts: {
+        reportsSubmitted,
+        votesCast,
+      },
+      breakdowns: {
+        reportsByStatus: toCountMap(reportsByStatus, 'status'),
+        reportsByType: toCountMap(reportsByType, 'type'),
+        votesByValue: toCountMap(votesByValue, 'vote'),
+      },
+    };
   }
 
   _findNearest(rows, lat, lng, radiusKm) {

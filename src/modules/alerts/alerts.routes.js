@@ -1,41 +1,51 @@
+import Joi from 'joi';
 import { Router } from 'express';
-import { AlertsRepository } from './alerts.repository.js';
-import { AlertsService } from './alerts.service.js';
-import { AlertsController } from './alerts.controller.js';
 import { authenticate } from '#shared/middlewares/auth.middleware.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import { createSubscriptionSchema, updateSubscriptionSchema } from './alerts.validator.js';
 
-const alertsRepository = new AlertsRepository();
-const alertsService = new AlertsService(alertsRepository);
-const alertsController = new AlertsController(alertsService);
 
-const router = Router();
+export const alertIdParamSchema = Joi.object({
+  id: Joi.number().integer().positive().required(),
+});
 
-router.post(
-  '/subscriptions',
-  authenticate,
-  validateRequest(createSubscriptionSchema, 'body'),
-  alertsController.createSubscription
-);
+export const createAlertsRouter = ({ alertsController }) => {
+  const router = Router();
 
-router.get('/subscriptions', authenticate, alertsController.getUserSubscriptions);
+  router.post(
+    '/subscriptions',
+    authenticate,
+    validateRequest(createSubscriptionSchema, 'body'),
+    alertsController.createSubscription
+  );
 
-router.patch(
-  '/subscriptions/:id',
-  authenticate,
-  validateRequest(updateSubscriptionSchema, 'body'),
-  alertsController.updateSubscription
-);
+  router.get('/subscriptions', authenticate, alertsController.getUserSubscriptions);
 
-router.patch(
-  '/subscriptions/:id/deactivate',
-  authenticate,
-  alertsController.deactivateSubscription
-);
+  router.patch(
+    '/subscriptions/:id',
+    authenticate,
+    validateRequest(alertIdParamSchema, 'params'),
+    validateRequest(updateSubscriptionSchema, 'body'),
+    alertsController.updateSubscription
+  );
 
-router.get('/', authenticate, alertsController.getUserAlerts);
+  router.patch(
+    '/subscriptions/:id/deactivate',
+    authenticate,
+    validateRequest(alertIdParamSchema, 'params'),
+    alertsController.deactivateSubscription
+  );
 
-router.patch('/:id/read', authenticate, alertsController.markAlertAsRead);
+  router.get('/', authenticate, alertsController.getUserAlerts);
 
-export default router;
+  router.patch(
+    '/:id/read',
+    authenticate,
+    validateRequest(alertIdParamSchema, 'params'),
+    alertsController.markAlertAsRead
+  );
+
+  return router;
+};
+
+export default createAlertsRouter;

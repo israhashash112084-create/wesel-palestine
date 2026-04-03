@@ -1,4 +1,4 @@
-import { ALERTS_JOB_NAMES } from '#modules/alerts/alerts.queue.js';
+import { ALERTS_JOB_NAMES } from '#modules/alerts/jobs/alerts.queue.js';
 import { AlertsRepository } from '#modules/alerts/alerts.repository.js';
 import { AlertsService } from '#modules/alerts/alerts.service.js';
 

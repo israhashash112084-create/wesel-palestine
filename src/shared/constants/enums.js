@@ -25,6 +25,34 @@ export const INCIDENT_STATUSES = {
   CLOSED: 'closed',
 };
 
+export const INCIDENT_STATUS_TRANSITIONS = {
+  [INCIDENT_STATUSES.PENDING]: [
+    INCIDENT_STATUSES.VERIFIED,
+    INCIDENT_STATUSES.REJECTED,
+    INCIDENT_STATUSES.CLOSED,
+  ],
+  [INCIDENT_STATUSES.VERIFIED]: [INCIDENT_STATUSES.REJECTED, INCIDENT_STATUSES.CLOSED],
+  [INCIDENT_STATUSES.REJECTED]: [INCIDENT_STATUSES.VERIFIED, INCIDENT_STATUSES.CLOSED],
+  [INCIDENT_STATUSES.CLOSED]: [],
+};
+
+export const INCIDENT_MUTABLE_FIELDS_BY_STATUS = {
+  [INCIDENT_STATUSES.PENDING]: [
+    'severity',
+    'description',
+    'trafficStatus',
+    'locationLat',
+    'locationLng',
+    'area',
+    'road',
+    'city',
+    'type',
+  ],
+  [INCIDENT_STATUSES.VERIFIED]: ['description', 'trafficStatus'],
+  [INCIDENT_STATUSES.REJECTED]: ['description'],
+  [INCIDENT_STATUSES.CLOSED]: [],
+};
+
 export const INCIDENT_SEVERITIES = {
   LOW: 'low',
   MEDIUM: 'medium',
@@ -57,4 +85,8 @@ export const CHECKPOINT_STATUSES = {
   OPEN: 'open',
   SLOW: 'slow',
   CLOSED: 'closed',
+};
+export const ALERT_STATUSES = {
+  PENDING: 'pending',
+  READ: 'read',
 };
