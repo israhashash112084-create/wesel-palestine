@@ -67,7 +67,19 @@ export const validateRequest = (schema, location = 'body') => {
       throw new ValidationError(error.details.map((d) => d.message).join(', '));
     }
 
-    Object.assign(req[location], value);
+    if (
+      req[location] !== null &&
+      req[location] !== undefined &&
+      typeof req[location] === 'object' &&
+      value !== null &&
+      value !== undefined &&
+      typeof value === 'object'
+    ) {
+      Object.assign(req[location], value);
+    } else {
+      req[location] = value;
+    }
+
     next();
   };
 };

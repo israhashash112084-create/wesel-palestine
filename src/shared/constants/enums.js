@@ -14,6 +14,7 @@ export const INCIDENT_TYPES = {
   ROAD_DAMAGE: 'road_damage',
   PROTEST: 'protest',
   CONSTRUCTION: 'construction',
+  CHECKPOINT_STATUS_UPDATE: 'checkpoint_status_update',
   OTHER: 'other',
 };
 

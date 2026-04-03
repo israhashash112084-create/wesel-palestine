@@ -16,10 +16,18 @@ export class ReportsRepository {
       type: true,
       severity: true,
       status: true,
+      checkpointId: true,
+      proposedCheckpointStatus: true,
       locationLat: true,
       locationLng: true,
       confidenceScore: true,
       createdAt: true,
+      duplicateOf: true,
+      incidentId: true,
+      area: true,
+      road: true,
+      city: true,
+
       user: this._userSelect(),
     };
   }
@@ -28,6 +36,8 @@ export class ReportsRepository {
     return {
       ...this._reportSelect(),
       area: true,
+      road: true,
+      city: true,
       description: true,
     };
   }
@@ -39,6 +49,16 @@ export class ReportsRepository {
       userId: true,
       duplicateOf: true,
       incidentId: true,
+      checkpoint: {
+        select: {
+          id: true,
+          name: true,
+          area: true,
+          city: true,
+          road: true,
+          status: true,
+        },
+      },
     };
   }
 
@@ -49,9 +69,13 @@ export class ReportsRepository {
         locationLat: data.locationLat,
         locationLng: data.locationLng,
         area: data.area ?? null,
+        road: data.road ?? null,
+        city: data.city ?? null,
         type: data.type,
         severity: data.severity,
         description: data.description,
+        checkpointId: data.checkpointId ?? null,
+        proposedCheckpointStatus: data.proposedCheckpointStatus ?? null,
         duplicateOf: data.duplicateOf ?? null,
         incidentId: data.incidentId ?? null,
       },
@@ -66,13 +90,17 @@ export class ReportsRepository {
     });
   }
 
-  async findMany({ status, type, area, skip, take, sortBy, sortOrder }) {
-    const where = {
-      duplicateOf: null,
-    };
+  async findMany({ status, type, area, skip, take, sortBy, sortOrder, includeDuplicates = false }) {
+    const where = {};
+
+    if (!includeDuplicates) {
+      where.duplicateOf = null;
+    }
+
     if (status !== undefined) where.status = status;
     if (type) where.type = type;
     if (area) where.area = { contains: area, mode: 'insensitive' };
+
     const [reports, total] = await prisma.$transaction([
       prisma.report.findMany({
         where,
@@ -86,8 +114,7 @@ export class ReportsRepository {
 
     const cleanedReports = reports.map((report) => {
       const filteredReport = Object.fromEntries(
-        // eslint-disable-next-line no-unused-vars
-        Object.entries(report).filter(([key, value]) => value !== null)
+        Object.entries(report).filter(([, value]) => value !== null)
       );
       return filteredReport;
     });
@@ -95,7 +122,37 @@ export class ReportsRepository {
     return { reports: cleanedReports, total };
   }
 
-  async findNearbyDuplicate({ locationLat, locationLng, type, area, excludeId = null }) {
+  async findNearbyDuplicate({
+    locationLat,
+    locationLng,
+    type,
+    area,
+    excludeId = null,
+    checkpointId,
+    proposedCheckpointStatus,
+  }) {
+    if (checkpointId && proposedCheckpointStatus) {
+      const windowSeconds = this._msToSeconds(DUPLICATE_TIME_WINDOW_MS);
+      const rows = await query(
+        `
+        SELECT id
+        FROM reports
+        WHERE checkpoint_id = $1
+          AND proposed_checkpoint_status = $2
+          AND type = $3
+          AND status IN ('pending', 'verified')
+          AND duplicate_of IS NULL
+          AND created_at > NOW() - ($4 || ' seconds')::INTERVAL
+          AND ($5::int IS NULL OR id != $5)
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [checkpointId, proposedCheckpointStatus, type, windowSeconds, excludeId]
+      );
+
+      return rows.rows[0] ?? null;
+    }
+
     const windowSeconds = this._msToSeconds(DUPLICATE_TIME_WINDOW_MS);
     const rows = await query(
       `
@@ -106,15 +163,44 @@ export class ReportsRepository {
         AND area             =$3
         AND  duplicate_of    IS NULL
         AND  created_at      > NOW() - ($2 || ' seconds')::INTERVAL
-        ${excludeId ? `AND id != ${excludeId}` : ''}
+        AND ($4::int IS NULL OR id != $4)
       `,
-      [type, windowSeconds, area]
+      [type, windowSeconds, area, excludeId]
     );
 
     return this._findNearest(rows.rows, locationLat, locationLng, DUPLICATE_RADIUS_KM);
   }
 
-  async findUserDuplicateReport({ userId, locationLat, locationLng, type, area }) {
+  async findUserDuplicateReport({
+    userId,
+    locationLat,
+    locationLng,
+    type,
+    area,
+    checkpointId,
+    proposedCheckpointStatus,
+  }) {
+    if (checkpointId && proposedCheckpointStatus) {
+      const windowSeconds = this._msToSeconds(USER_TIME_WINDOW_MS);
+      const rows = await query(
+        `
+      SELECT id
+      FROM reports
+      WHERE user_id = $1
+        AND type = $2
+        AND checkpoint_id = $3
+        AND proposed_checkpoint_status = $4
+        AND status != 'rejected'
+        AND created_at > NOW() - ($5 || ' seconds')::INTERVAL
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+        [userId, type, checkpointId, proposedCheckpointStatus, windowSeconds]
+      );
+
+      return rows.rows[0] ?? null;
+    }
+
     const windowSeconds = this._msToSeconds(USER_TIME_WINDOW_MS);
     const rows = await query(
       `

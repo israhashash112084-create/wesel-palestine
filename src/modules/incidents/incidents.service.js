@@ -2,12 +2,10 @@ import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { INCIDENT_STATUSES, TRAFFIC_STATUSES } from '#shared/constants/enums.js';
 import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
-import { addIncidentAlertsJob } from '#modules/alerts/alerts.queue.js';
 
 export class IncidentsService {
-  constructor(incidentsRepository, alertsService) {
+  constructor(incidentsRepository) {
     this.repo = incidentsRepository;
-    this.alertsService = alertsService;
   }
 
   _toComparableValue(value) {
@@ -29,6 +27,9 @@ export class IncidentsService {
       'trafficStatus',
       'locationLat',
       'locationLng',
+      'area',
+      'road',
+      'city',
       'type',
     ];
 
@@ -59,6 +60,8 @@ export class IncidentsService {
       locationLat: body.locationLat,
       locationLng: body.locationLng,
       area: body.area,
+      road: body.road,
+      city: body.city,
       type: body.type,
       severity: body.severity,
       description: body.description,
@@ -99,7 +102,7 @@ export class IncidentsService {
     });
 
     return {
-      incidents,
+      incidents: incidents,
       pagination: buildPaginationMeta(total),
     };
   }
@@ -188,11 +191,9 @@ export class IncidentsService {
 
   async getIncidentById(id) {
     const incident = await this.repo.findById(id);
-
     if (!incident) {
       throw new NotFoundError('Incident not found');
     }
-
     return incident;
   }
 
@@ -201,24 +202,19 @@ export class IncidentsService {
 
     const moderatedAt = new Date();
 
-    const incident = await this.repo.create(
+    return this.repo.create(
       this._buildIncidentCreatePayload(adminInfo, body, {
         status: INCIDENT_STATUSES.VERIFIED, // Automatically mark as verified when created by a moderator/admin
         moderatedAt,
         moderatedBy: adminInfo.id,
       })
     );
-
-    if (this.alertsService) {
-      await this.alertsService.handleNewIncident(incident);
-    }
-
-    return incident;
   }
 
   async createIncident(userInfo, body) {
-    // TODO: Implement a more robust duplicate detection mechanism
-    return await this.repo.create(
+    // TODO: Implement a more robust duplicate detection mechanism that considers both location and time proximity, as well as incident type and severity.
+
+    return this.repo.create(
       this._buildIncidentCreatePayload(userInfo, body, {
         status: INCIDENT_STATUSES.PENDING,
       })
@@ -227,7 +223,6 @@ export class IncidentsService {
 
   async updateIncident(id, body, userInfo) {
     const existingIncident = await this.repo.findById(id);
-
     if (!existingIncident) {
       throw new NotFoundError('Incident not found');
     }
@@ -238,24 +233,29 @@ export class IncidentsService {
       throw new BadRequestError('No changes detected in update payload');
     }
 
-    return this.repo.updateWithStatusHistory(id, {
+    const updatedIncident = await this.repo.updateWithStatusHistory(id, {
       severity: body.severity,
       description: body.description,
       trafficStatus: body.trafficStatus,
       locationLat: body.locationLat,
       locationLng: body.locationLng,
+      area: body.area,
+      road: body.road,
+      city: body.city,
       type: body.type,
       oldStatus: existingIncident.status,
+      newStatus: existingIncident.status,
       changedBy: userInfo.id,
       notes: body.notes,
       oldValues,
       newValues,
     });
+
+    return updatedIncident;
   }
 
   async closeIncident(id, userInfo) {
     const existingIncident = await this.repo.findById(id);
-
     if (!existingIncident) {
       throw new NotFoundError('Incident not found');
     }
@@ -264,25 +264,28 @@ export class IncidentsService {
       throw new BadRequestError('Incident is already closed');
     }
 
-    return this.repo.updateWithStatusHistory(id, {
+    const updatedIncident = await this.repo.updateWithStatusHistory(id, {
       status: INCIDENT_STATUSES.CLOSED,
       trafficStatus: TRAFFIC_STATUSES.CLOSED,
       resolvedAt: new Date(),
       oldStatus: existingIncident.status,
+      newStatus: INCIDENT_STATUSES.CLOSED,
       changedBy: userInfo.id,
       notes: 'Closed incident',
       oldValues: { status: existingIncident.status },
       newValues: { status: INCIDENT_STATUSES.CLOSED },
     });
+
+    return updatedIncident;
   }
 
   async getIncidentReports(incidentId) {
     const incident = await this.repo.findById(incidentId);
-
     if (!incident) {
       throw new NotFoundError('Incident not found');
     }
 
+    // mock data for now, will implement actual reports logic in the future
     return [
       {
         id: 'report1',
@@ -292,12 +295,8 @@ export class IncidentsService {
     ];
   }
   async verifyIncident(id, userInfo, notes = 'Verified incident') {
-  const incident = await this._moderateIncident(id, INCIDENT_STATUSES.VERIFIED, userInfo, notes);
-
-  await addIncidentAlertsJob(incident.id);
-
-  return incident;
-}
+    return this._moderateIncident(id, INCIDENT_STATUSES.VERIFIED, userInfo, notes);
+  }
 
   async rejectIncident(id, userInfo, notes = 'Reject incident') {
     return this._moderateIncident(id, INCIDENT_STATUSES.REJECTED, userInfo, notes);
@@ -322,6 +321,7 @@ export class IncidentsService {
       moderatedBy: actorId,
       trafficStatus: existingIncident.trafficStatus,
       oldStatus: existingIncident.status,
+      newStatus,
       changedBy: actorId,
       notes,
       oldValues: {

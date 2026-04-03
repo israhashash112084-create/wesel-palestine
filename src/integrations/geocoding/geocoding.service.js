@@ -1,25 +1,65 @@
 import { logger } from '#shared/utils/logger.js';
 
+const USER_AGENT = 'wesel-palestine/1.0 (contact: support@wesel.ps)';
 const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
 const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search';
 
-const USER_AGENT = 'WaselPalestine/1.0 (wasel-palestine@dev.local)';
-const geoCache = new Map();
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const BOUNDARIES = {
+  lat: { min: 31.2, max: 32.6 },
+  lng: { min: 34.9, max: 35.6 },
+};
 
-const fetchNominatim = async (baseUrl, params, lang) => {
+const extractLocationComponents = (address = {}) => {
+  const road =
+    address.road ||
+    address.pedestrian ||
+    address.footway ||
+    address.path ||
+    address.cycleway ||
+    null;
+
+  const area =
+    address.suburb ||
+    address.neighbourhood ||
+    address.quarter ||
+    address.city_district ||
+    address.district ||
+    address.borough ||
+    address.residential ||
+    address.hamlet ||
+    address.village ||
+    null;
+
+  const city =
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.county ||
+    address.state_district ||
+    null;
+
+  return { road, area, city };
+};
+
+const _fetchReverse = async (lat, lng) => {
   try {
-    params.set('format', 'json');
-    params.set('addressdetails', '1');
+    const url = new URL(NOMINATIM_REVERSE_URL);
+    url.searchParams.set('lat', String(lat));
+    url.searchParams.set('lon', String(lng));
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('zoom', '18');
+    url.searchParams.set('addressdetails', '1');
+    url.searchParams.set('accept-language', 'en');
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(`${baseUrl}?${params.toString()}`, {
+    const response = await fetch(url.toString(), {
       headers: {
         'User-Agent': USER_AGENT,
         Accept: 'application/json',
-        'Accept-Language': lang,
+        'Accept-Language': 'en',
       },
       signal: controller.signal,
     });
@@ -27,162 +67,180 @@ const fetchNominatim = async (baseUrl, params, lang) => {
     clearTimeout(timeout);
 
     if (!response.ok) {
-      logger.warn(`[geocoding] Nominatim returned ${response.status}`);
+      logger.warn(`[geocoding] Reverse geocoding failed: ${response.status}`);
       return null;
     }
 
-    return await response.json();
+    const data = await response.json();
+    const components = extractLocationComponents(data.address ?? {});
+
+    logger.debug('[geocoding] Reverse geocoded', {
+      lat,
+      lng,
+      components,
+      rawAddress: data.address ?? null,
+    });
+
+    return components;
   } catch (err) {
     if (err.name === 'AbortError') {
-      logger.warn('[geocoding] Nominatim request timed out');
+      logger.warn('[geocoding] Reverse geocoding timed out');
     } else {
-      logger.error('[geocoding] Nominatim request failed', { error: err.message });
+      logger.error('[geocoding] Reverse geocoding failed', { error: err.message });
     }
     return null;
   }
 };
-/**
- * @param {object} data
- * @returns {string}
- */
-const buildFullAddressString = (data) => {
-  if (!data) return '';
 
-  const parts = [];
+const _fetchForward = async (query) => {
+  try {
+    const url = new URL(NOMINATIM_SEARCH_URL);
+    url.searchParams.set('q', query);
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('addressdetails', '1');
+    url.searchParams.set('limit', '1');
+    url.searchParams.set('countrycodes', 'ps');
+    url.searchParams.set('accept-language', 'en');
 
-  if (data.display_name) parts.push(data.display_name);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
 
-  if (data.address) {
-    parts.push(...Object.values(data.address).filter((v) => typeof v === 'string' && v.length > 0));
+    const response = await fetch(url.toString(), {
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+        'Accept-Language': 'en',
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      logger.warn(`[geocoding] Forward geocoding failed: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (!data?.length) {
+      logger.warn('[geocoding] Forward geocoding: no results', { query });
+      return null;
+    }
+
+    const result = data[0];
+    const lat = Number(result.lat);
+    const lng = Number(result.lon);
+
+    if (
+      lat < BOUNDARIES.lat.min ||
+      lat > BOUNDARIES.lat.max ||
+      lng < BOUNDARIES.lng.min ||
+      lng > BOUNDARIES.lng.max
+    ) {
+      logger.warn('[geocoding] Forward geocoding: outside West Bank', { lat, lng, query });
+      return null;
+    }
+
+    const components = extractLocationComponents(result.address ?? {});
+
+    logger.debug('[geocoding] Forward geocoded', {
+      query,
+      lat,
+      lng,
+      components,
+      rawAddress: result.address ?? null,
+    });
+
+    return {
+      latitude: lat,
+      longitude: lng,
+      ...components,
+    };
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      logger.warn('[geocoding] Forward geocoding timed out');
+    } else {
+      logger.error('[geocoding] Forward geocoding failed', { error: err.message });
+    }
+    return null;
   }
+};
+
+export const buildLocationQuery = (location = {}) => {
+  const parts = [location.road, location.area, location.city]
+    .filter(Boolean)
+    .map((part) => String(part).trim())
+    .filter(Boolean);
 
   return parts.join(', ');
 };
 
-/**
- * @param {object} address
- * @returns {string|null}
- */
-const extractPrimaryName = (address) => {
-  if (!address) return null;
-
-  return (
-    address.road ??
-    address.suburb ??
-    address.quarter ??
-    address.village ??
-    address.town ??
-    address.city_district ??
-    address.city ??
-    address.municipality ??
-    address.county ??
-    address.state ??
-    null
-  );
-};
-/**
-
- * @param {number} lat
- * @param {number} lng
- * @returns {Promise<{ en: string, ar: string, primaryEn: string|null, primaryAr: string|null }>}
- */
-export const reverseGeocodeBilingual = async (lat, lng) => {
-  const cacheKey = `reverse:${lat.toFixed(4)},${lng.toFixed(4)}`;
-
-  const cached = geoCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return cached.value;
+export const normalizeLocation = async (location) => {
+  if (!location || typeof location !== 'object') {
+    throw new Error('location is required');
   }
 
-  const buildParams = () => {
-    const p = new URLSearchParams();
-    p.set('lat', String(lat));
-    p.set('lon', String(lng));
-    p.set('zoom', '14');
-    return p;
-  };
+  const hasCoordinates = location.latitude !== undefined && location.longitude !== undefined;
 
-  const [enData, arData] = await Promise.all([
-    fetchNominatim(NOMINATIM_REVERSE_URL, buildParams(), 'en'),
-    fetchNominatim(NOMINATIM_REVERSE_URL, buildParams(), 'ar'),
-  ]);
+  const hasTextLocation =
+    Boolean(location.area?.trim()) ||
+    Boolean(location.city?.trim()) ||
+    Boolean(location.road?.trim());
 
-  const result = {
-    en: buildFullAddressString(enData),
-    ar: buildFullAddressString(arData),
-    primaryEn: extractPrimaryName(enData?.address) ?? enData?.display_name ?? null,
-    primaryAr: extractPrimaryName(arData?.address) ?? arData?.display_name ?? null,
-  };
-
-  geoCache.set(cacheKey, { value: result, ts: Date.now() });
-
-  logger.info('[geocoding] Reverse geocoded', {
-    lat,
-    lng,
-    primaryEn: result.primaryEn,
-    primaryAr: result.primaryAr,
-  });
-
-  return result;
-};
-/**
- * @param {string} placeName
- * @returns {Promise<{ lat: number, lng: number, displayName: string, placeType: string }|null>}
- */
-export const forwardGeocode = async (placeName) => {
-  const cacheKey = `forward:${placeName.trim().toLowerCase()}`;
-
-  const cached = geoCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return cached.value;
+  if (hasCoordinates && hasTextLocation) {
+    throw new Error('location must be either coordinates or text location, not both');
   }
 
-  const isArabic = /[\u0600-\u06FF]/.test(placeName);
-
-  const params = new URLSearchParams();
-  params.set('q', placeName.trim());
-  params.set('countrycodes', 'ps');
-  params.set('limit', '1');
-  params.set('viewbox', '34.9,32.6,35.6,31.2');
-  params.set('bounded', '1');
-
-  const data = await fetchNominatim(NOMINATIM_SEARCH_URL, params, isArabic ? 'ar' : 'en');
-  const results = Array.isArray(data) ? data : [];
-
-  if (!results.length) {
-    logger.info(`[geocoding] No results for "${placeName}"`);
-    geoCache.set(cacheKey, { value: null, ts: Date.now() });
-    return null;
+  if (!hasCoordinates && !hasTextLocation) {
+    throw new Error('location must include coordinates or text location');
   }
 
-  const best = results[0];
-  const result = {
-    lat: parseFloat(best.lat),
-    lng: parseFloat(best.lon),
-    displayName: best.display_name,
-    placeType: best.type ?? best.class ?? 'unknown',
+  if (hasCoordinates) {
+    const latitude = Number(location.latitude);
+    const longitude = Number(location.longitude);
+
+    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      throw new Error('latitude and longitude must be valid numbers');
+    }
+
+    if (
+      latitude < BOUNDARIES.lat.min ||
+      latitude > BOUNDARIES.lat.max ||
+      longitude < BOUNDARIES.lng.min ||
+      longitude > BOUNDARIES.lng.max
+    ) {
+      throw new Error('Coordinates must be within West Bank boundaries');
+    }
+
+    const reverse = await _fetchReverse(latitude, longitude);
+
+    return {
+      latitude,
+      longitude,
+      area: reverse?.area ?? null,
+      road: reverse?.road ?? null,
+      city: reverse?.city ?? null,
+    };
+  }
+
+  const query = buildLocationQuery(location);
+
+  if (!query) {
+    throw new Error('Text location is empty');
+  }
+
+  const forward = await _fetchForward(query);
+
+  if (!forward) {
+    throw new Error('Could not resolve the provided location');
+  }
+
+  return {
+    latitude: forward.latitude,
+    longitude: forward.longitude,
+    area: forward.area ?? null,
+    road: forward.road ?? null,
+    city: forward.city ?? null,
   };
-
-  geoCache.set(cacheKey, { value: result, ts: Date.now() });
-
-  logger.info('[geocoding] Forward geocoded', {
-    input: placeName,
-    displayName: result.displayName,
-    placeType: result.placeType,
-  });
-
-  return result;
-};
-/**
- * @param {string} area
- * @param {{ en: string, ar: string }} geocoded
- * @returns {boolean}
- */
-export const areaMatchesLocation = (area, geocoded) => {
-  const normalized = area.trim().toLowerCase();
-
-  const inEn = geocoded.en?.toLowerCase().includes(normalized) ?? false;
-  const inAr = geocoded.ar?.includes(area.trim()) ?? false;
-
-  return inEn || inAr;
 };

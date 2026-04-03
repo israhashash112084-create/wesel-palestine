@@ -23,7 +23,16 @@ export class CheckpointsService {
   }
 
   _buildAuditDiff(existingCheckpoint, body) {
-    const updatableFields = ['name', 'areaName', 'description', 'latitude', 'longitude', 'status'];
+    const updatableFields = [
+      'name',
+      'area',
+      'road',
+      'city',
+      'description',
+      'latitude',
+      'longitude',
+      'status',
+    ];
 
     const oldValues = {};
     const newValues = {};
@@ -71,7 +80,7 @@ export class CheckpointsService {
   }
 
   async createCheckpoint(adminInfo, body) {
-    const { name, areaName, description, latitude, longitude, status } = body;
+    const { name, area, road, city, description, latitude, longitude, status } = body;
 
     const existingCheckpoint = await this.repo.findNearestByLocationWithinRadius(
       latitude,
@@ -88,7 +97,9 @@ export class CheckpointsService {
     return this.repo.createWithAudit({
       data: {
         name,
-        areaName,
+        area,
+        road,
+        city,
         description,
         latitude,
         longitude,
@@ -101,7 +112,9 @@ export class CheckpointsService {
         oldValues: null,
         newValues: {
           name,
-          areaName,
+          area,
+          road,
+          city,
           description,
           latitude,
           longitude,
@@ -166,7 +179,9 @@ export class CheckpointsService {
     return this.repo.updateByIdWithAudit(id, {
       data: {
         name: body.name,
-        areaName: body.areaName,
+        area: body.area,
+        road: body.road,
+        city: body.city,
         description: body.description,
         latitude: body.latitude,
         longitude: body.longitude,
@@ -252,7 +267,7 @@ export class CheckpointsService {
       action: 'deleted',
       oldValues: {
         name: checkpoint.name,
-        areaName: checkpoint.areaName,
+        area: checkpoint.area,
         description: checkpoint.description,
         latitude: this._toComparableValue(checkpoint.latitude),
         longitude: this._toComparableValue(checkpoint.longitude),
