@@ -312,7 +312,7 @@ export class ReportsService {
       duplicateOf: duplicate ? duplicate.id : null,
       incidentId,
     });
-
+       
     if (duplicate) {
       await this.repo.incrementReportConfidenceScore(duplicate.id, 1);
     }
@@ -336,6 +336,7 @@ export class ReportsService {
       );
 
       const verifiedReport = await this.repo.findById(report.id);
+      console.log('verified report after approve:', verifiedReport);
       await _invalidateReportCache(report.id);
 
       return {
@@ -674,11 +675,18 @@ export class ReportsService {
     await this.repo.increaseReportOwnersScore(reportId);
 
     if (this.alertsService) {
+  console.log('calling createReportStatusNotifications with:', {
+    ...report,
+    status: 'verified',
+  });
+
   await this.alertsService.createReportStatusNotifications({
     ...report,
     status: 'verified',
   });
-   }
+
+  console.log('report notifications creation finished');
+}
 
     await _invalidateReportCache(reportId);
   }
@@ -704,11 +712,18 @@ export class ReportsService {
     }
 
     await this.repo.decreaseReportOwnersScore(reportId);
-    if (this.alertsService) {
+   if (this.alertsService) {
+  console.log('calling createReportStatusNotifications (REJECT) with:', {
+    ...report,
+    status: 'rejected',
+  });
+
   await this.alertsService.createReportStatusNotifications({
     ...report,
     status: 'rejected',
   });
+
+  console.log('report notifications creation finished (REJECT)');
 }
     await _invalidateReportCache(reportId);
   }

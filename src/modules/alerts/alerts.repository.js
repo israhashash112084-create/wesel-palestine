@@ -106,9 +106,7 @@ return await prisma.alertSubscription.updateMany({
         subscriptionId,
       },
     },
-    update: {
-      status,
-    },
+    update: {},
     create: {
       incidentId,
       subscriptionId,
@@ -129,7 +127,14 @@ async findDuplicateReports(reportId) {
 }
 
 async createReportNotification({ userId, reportId, message, status = 'pending' }) {
-  return await prisma.reportNotification.create({
+  console.log('createReportNotification input:', {
+    userId,
+    reportId,
+    message,
+    status,
+  });
+
+  const created = await prisma.reportNotification.create({
     data: {
       userId,
       reportId,
@@ -137,8 +142,25 @@ async createReportNotification({ userId, reportId, message, status = 'pending' }
       status,
     },
   });
+
+  console.log('created report notification:', created);
+  return created;
 }
 
+async findAlertById(alertId) {
+  return await prisma.alert.findUnique({
+    where: { id: alertId },
+  });
+}
+
+async updateAlertStatus(alertId, data) {
+  return await prisma.alert.update({
+    where: { id: alertId },
+    data,
+  });
+   console.log('created report notification:', created);
+  return created;
+}
   async getUserStats(userId) {
     const [activeSubscriptionsByCategory, activeSubscriptions, inactiveSubscriptions] =
       await Promise.all([

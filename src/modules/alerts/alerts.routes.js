@@ -4,7 +4,6 @@ import { authenticate } from '#shared/middlewares/auth.middleware.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
 import { createSubscriptionSchema, updateSubscriptionSchema } from './alerts.validator.js';
 
-
 export const alertIdParamSchema = Joi.object({
   id: Joi.number().integer().positive().required(),
 });

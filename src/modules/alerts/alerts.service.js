@@ -1,5 +1,8 @@
 import { BadRequestError, NotFoundError } from '#shared/utils/errors.js';
-
+import { addSendAlertJob } from '#modules/alerts/jobs/alerts.queue.js';
+import {
+  INCIDENT_STATUSES
+} from '#shared/constants/enums.js';
 export class AlertsService {
   /**
    * @param {import('./alerts.repository.js').AlertsRepository} alertsRepository
@@ -13,14 +16,14 @@ export class AlertsService {
   }
 
   _mapIncidentTypeToCategory(type) {
-    const supportedCategories = ['checkpoint', 'closure', 'delay', 'accident', 'weather_hazard'];
+  const mapping = {
+    delay: 'traffic',
+    accident: 'accident',
+    closure: 'closure',
+  };
 
-    if (supportedCategories.includes(type)) {
-      return type;
-    }
-
-    return null;
-  }
+  return mapping[type] || null;
+}
 
   _toNumber(value) {
     if (value === null || value === undefined) {
@@ -113,84 +116,143 @@ export class AlertsService {
     return { message: 'Alert marked as read successfully' };
   }
 
+
+
   async processIncidentAlerts(incidentId) {
-    const incident = await this.alertsRepository.findIncidentById(incidentId);
+  console.log('processIncidentAlerts started for incident:', incidentId);
 
-    if (!incident) {
-      return { skipped: true, reason: 'Incident not found', incidentId };
+  const incident = await this.alertsRepository.findIncidentById(incidentId);
+  console.log('incident found:', incident?.id, 'status:', incident?.status, 'type:', incident?.type);
+
+  if (!incident) {
+    console.log('skip: incident not found');
+    return { skipped: true, reason: 'Incident not found', incidentId };
+  }
+
+  if (incident.status !== INCIDENT_STATUSES.VERIFIED) {
+    console.log('skip: incident is not verified');
+    return { skipped: true, reason: 'Incident is not verified', incidentId };
+  }
+
+  const category = this._mapIncidentTypeToCategory(incident.type);
+  console.log('mapped category:', category);
+
+  if (!category) {
+    console.log('skip: incident category is not supported');
+    return { skipped: true, reason: 'Incident category is not supported', incidentId };
+  }
+
+  const incidentLat = this._toNumber(incident.locationLat);
+  const incidentLng = this._toNumber(incident.locationLng);
+  console.log('incident coordinates:', incidentLat, incidentLng);
+
+  if (incidentLat === null || incidentLng === null) {
+    console.log('skip: incident location is missing');
+    return { skipped: true, reason: 'Incident location is missing', incidentId };
+  }
+
+  const matchingSubscriptions = await this.alertsRepository.findMatchingSubscriptionsForIncident({
+    category,
+  });
+  console.log('matching subscriptions by category:', matchingSubscriptions.length);
+
+  if (!matchingSubscriptions.length) {
+    console.log('skip: no matching subscriptions by category');
+    return { skipped: true, reason: 'No matching subscriptions by category', incidentId };
+  }
+
+  const subscriptionsInRadius = matchingSubscriptions.filter((subscription) => {
+    const subscriptionLat = this._toNumber(subscription.areaLat);
+    const subscriptionLng = this._toNumber(subscription.areaLng);
+    const radiusKm = this._toNumber(subscription.radiusKm);
+
+    if (subscriptionLat === null || subscriptionLng === null || radiusKm === null) {
+      return false;
     }
 
-    if (incident.status !== INCIDENT_STATUSES.VERIFIED) {
-      return { skipped: true, reason: 'Incident is not verified', incidentId };
-    }
-
-    const category = this._mapIncidentTypeToCategory(incident.type);
-
-    if (!category) {
-      return { skipped: true, reason: 'Incident category is not supported', incidentId };
-    }
-
-    const incidentLat = this._toNumber(incident.locationLat);
-    const incidentLng = this._toNumber(incident.locationLng);
-
-    if (incidentLat === null || incidentLng === null) {
-      return { skipped: true, reason: 'Incident location is missing', incidentId };
-    }
-
-    const matchingSubscriptions = await this.alertsRepository.findMatchingSubscriptionsForIncident({
-      category,
-    });
-
-    if (!matchingSubscriptions.length) {
-      return { skipped: true, reason: 'No matching subscriptions by category', incidentId };
-    }
-
-    const subscriptionsInRadius = matchingSubscriptions.filter((subscription) => {
-      const subscriptionLat = this._toNumber(subscription.areaLat);
-      const subscriptionLng = this._toNumber(subscription.areaLng);
-      const radiusKm = this._toNumber(subscription.radiusKm);
-
-      if (subscriptionLat === null || subscriptionLng === null || radiusKm === null) {
-        return false;
-      }
-
-      const distanceKm = this._calculateDistanceKm(
-        incidentLat,
-        incidentLng,
-        subscriptionLat,
-        subscriptionLng
-      );
-
-      return distanceKm <= radiusKm;
-    });
-
-    if (!subscriptionsInRadius.length) {
-      return { skipped: true, reason: 'No subscriptions matched the radius', incidentId };
-    }
-
-    await Promise.all(
-      subscriptionsInRadius.map((subscription) =>
-        this.alertsRepository.createAlert({
-          incidentId: incident.id,
-          subscriptionId: subscription.id,
-          status: 'pending',
-        })
-      )
+    const distanceKm = this._calculateDistanceKm(
+      incidentLat,
+      incidentLng,
+      subscriptionLat,
+      subscriptionLng
     );
 
-    return {
-      success: true,
-      incidentId,
-      alertsCreated: subscriptionsInRadius.length,
-    };
+    return distanceKm <= radiusKm;
+  });
+
+  console.log('subscriptions in radius:', subscriptionsInRadius.length);
+
+  if (!subscriptionsInRadius.length) {
+    console.log('skip: no subscriptions matched the radius');
+    return { skipped: true, reason: 'No subscriptions matched the radius', incidentId };
   }
+
+  const createdAlerts = await Promise.all(
+    subscriptionsInRadius.map((subscription) =>
+      this.alertsRepository.createAlert({
+        incidentId: incident.id,
+        subscriptionId: subscription.id,
+        status: 'pending',
+      })
+    )
+  );
+
+  console.log('created alerts count:', createdAlerts.length);
+
+  await Promise.all(
+    createdAlerts.map((alert) => {
+      console.log('Adding SEND_ALERT job for alert:', alert.id);
+      return addSendAlertJob(alert.id);
+    })
+  );
+
+  return {
+    success: true,
+    incidentId,
+    alertsCreated: subscriptionsInRadius.length,
+  };
+}
+
+    async sendAlert(alertId) {
+  const alert = await this.alertsRepository.findAlertById(alertId);
+
+  if (!alert) {
+    return { skipped: true, reason: 'Alert not found', alertId };
+  }
+
+  if (alert.status !== 'pending') {
+    return { skipped: true, reason: 'Alert already processed', alertId };
+  }
+
+  await this.alertsRepository.updateAlertStatus(alertId, {
+    status: 'sent',
+    sentAt: new Date(),
+  });
+
+  return {
+    success: true,
+    alertId,
+    status: 'sent',
+  };
+}
+
+
+
+
+
+
+
+
+
 
 async createReportStatusNotifications(report) {
   const recipients = [];
 
-  if (report.userId) {
-    recipients.push(report.userId);
-  }
+  const ownerId = report.userId ?? report.user?.id;
+
+   if (ownerId) {
+  recipients.push(ownerId);
+    }
 
   const duplicates = await this.alertsRepository.findDuplicateReports(report.id);
 
@@ -199,7 +261,7 @@ async createReportStatusNotifications(report) {
       recipients.push(duplicate.userId);
     }
   }
-
+console.log('recipients:', recipients);
   if (recipients.length === 0) {
     return { skipped: true, reason: 'No recipients found' };
   }
@@ -232,44 +294,5 @@ async createReportStatusNotifications(report) {
   async handleNewIncident(incident) {
     return await this.processIncidentAlerts(incident.id);
   }
-  async createReportStatusNotifications(report) {
-  const recipients = [];
-
-  if (report.userId) {
-    recipients.push(report.userId);
-  }
-
-  const duplicates = await this.alertsRepository.findDuplicateReports(report.id);
-
-  for (const duplicate of duplicates) {
-    if (duplicate.userId && !recipients.includes(duplicate.userId)) {
-      recipients.push(duplicate.userId);
-    }
-  }
-
-  if (recipients.length === 0) {
-    return { skipped: true, reason: 'No recipients found' };
-  }
-
-  const message =
-    report.status === 'verified'
-      ? `Your report #${report.id} has been approved.`
-      : `Your report #${report.id} has been rejected.`;
-
-  await Promise.all(
-    recipients.map((userId) =>
-      this.alertsRepository.createReportNotification({
-        userId,
-        reportId: report.id,
-        message,
-        status: 'pending',
-      })
-    )
-  );
-
-  return {
-    success: true,
-    notificationsCreated: recipients.length,
-  };
-}
+  
 }

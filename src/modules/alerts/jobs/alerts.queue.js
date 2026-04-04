@@ -11,7 +11,21 @@ export const alertsQueue = new Queue('alerts', { connection: bullMQConnection })
 
 export const ALERTS_JOB_NAMES = {
   PROCESS_INCIDENT_ALERTS: 'process-incident-alerts',
+   SEND_ALERT: 'send-alert',
 };
+
+
+export const addSendAlertJob = (alertId) =>
+  alertsQueue.add(
+    ALERTS_JOB_NAMES.SEND_ALERT,
+    { alertId },
+    {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+    }
+  );
 
 export const addIncidentAlertsJob = (incidentId) =>
   alertsQueue.add(

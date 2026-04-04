@@ -10,6 +10,9 @@ export const alertsProcessor = async (job) => {
     case ALERTS_JOB_NAMES.PROCESS_INCIDENT_ALERTS:
       return await alertsService.processIncidentAlerts(job.data.incidentId);
 
+    case ALERTS_JOB_NAMES.SEND_ALERT:
+      return await alertsService.sendAlert(job.data.alertId);
+
     default:
       throw new Error(`Unknown alerts job name: ${job.name}`);
   }
