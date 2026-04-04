@@ -401,6 +401,8 @@ model RouteCache {
   expiresAt    DateTime @map("expires_at")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+  checkpointsIds Int[] @map("checkpoint_ids")
+  areas String[]  @map("areas")
 
   @@index([cacheKey])
   @@index([expiresAt])
