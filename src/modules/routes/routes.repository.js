@@ -38,41 +38,6 @@ export class RoutesRepository {
     });
   }
 
-  async findActiveCheckpoints() {
-    return await prisma.checkpoint.findMany({
-      where: {
-        status: {
-          in: [TRAFFIC_STATUSES.CLOSED, TRAFFIC_STATUSES.SLOW],
-        },
-      },
-      select: {
-        id: true,
-        name: true,
-        latitude: true,
-        longitude: true,
-        status:    true,
-        city:  true,
-      },
-    });
-  }
-
-  async findActiveIncidents() {
-    return await prisma.incident.findMany({
-      where: {
-        status:     INCIDENT_STATUSES.VERIFIED,
-       // isVerified: true,
-      },
-      select: {
-        id: true,
-        type: true,
-        severity: true,
-        locationLat: true,
-        locationLng: true,
-        checkpointId: true,
-        area: true,
-      },
-    });
-  }
 
   async logApiCall({ service, endpoint, statusCode, responseTimeMs, isFallback, errorMessage }) {
     await prisma.externalApiLog.create({
@@ -170,31 +135,6 @@ export class RoutesRepository {
     };
   }
 
-  async findCheckpointsByArea() {
-  return prisma.checkpoint.findMany({
-    where: {
-      status: {
-        in: [TRAFFIC_STATUSES.CLOSED, TRAFFIC_STATUSES.SLOW],
-      },
-    },
-    select: {
-      status: true,
-      city: true,
-    },
-  });
-}
-
-async findIncidentsByArea() {
-  return prisma.incident.findMany({
-    where: {
-      status: INCIDENT_STATUSES.VERIFIED,
-    },
-    select: {
-      severity: true,
-      area: true,
-    },
-  });
-}
 
 async getUserRouteHistoryStats(userId) {
   return prisma.routeHistory.aggregate({

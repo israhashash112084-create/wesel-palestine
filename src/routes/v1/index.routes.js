@@ -54,7 +54,7 @@ const reportsController = new ReportsController(reportsService);
 incidentsService.setReportsService(reportsService);
 
 const routesRepository = new RoutesRepository();
-const routesService = new RoutesService(routesRepository);
+const routesService = new RoutesService(routesRepository, {checkpointsService, incidentsService});
 const routesController = new RoutesController(routesService);
 
 const authRepository = new AuthRepository();

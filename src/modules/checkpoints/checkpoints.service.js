@@ -662,4 +662,12 @@ export class CheckpointsService {
       }
     );
   }
+
+async getActiveCheckpoints() {
+  return this.repo.findActiveCheckpoints();
+}
+
+async getCheckpointsByArea() {
+  return this.repo.findCheckpointsByArea();
+}
 }

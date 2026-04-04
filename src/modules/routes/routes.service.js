@@ -186,8 +186,10 @@ const _isRouteValid = (geometry, checkpointsToAvoid = [], areaBoxes = []) => {
 
 export class RoutesService {
 
-  constructor(routesRepository) {
+  constructor(routesRepository, deps) {
     this.routesRepository = routesRepository;
+    this.checkpointsService = deps.checkpointsService;
+    this.incidentsService = deps.incidentsService;
   }
 
   async estimateRoute({ from, to, avoid_checkpoints ,avoid_areas, include_geometry }, userId, options={}) {
@@ -227,8 +229,8 @@ export class RoutesService {
     }
 
     const [allCheckpoints, allIncidents] = await Promise.all([
-      this.routesRepository.findActiveCheckpoints(),
-      this.routesRepository.findActiveIncidents(),
+      this.checkpointsService.getActiveCheckpoints(),
+      this.incidentsService.getActiveIncidents(),
     ]);
 
     let distanceKm, durationMinutes, geometry, isFallback;
@@ -738,8 +740,8 @@ async compareRoutes({ from, to, scenarios }, userId) {
 
 async getAreasStatus() {
   const [checkpoints, incidents] = await Promise.all([
-    this.routesRepository.findCheckpointsByArea(),
-    this.routesRepository.findIncidentsByArea(),
+    this.checkpointsService.getCheckpointsByArea(),
+    this.incidentsService.getIncidentsByArea(),
   ]);
 
   const areas = Object.keys(AREA_BOUNDARIES);
@@ -816,7 +818,7 @@ async getRouteHistoryStats(userId) {
 }
 
 async getActiveCheckpoints() {
-  const checkpoints = await this.routesRepository.findActiveCheckpoints();
+  const checkpoints = await this.checkpointsService.getActiveCheckpoints();
 
   return checkpoints.map((cp) => ({
     id: cp.id,
@@ -831,7 +833,7 @@ async getActiveCheckpoints() {
 }
 
 async getActiveIncidents() {
-  const incidents = await this.routesRepository.findActiveIncidents();
+  const incidents = await this.incidentsService.getActiveIncidents();
 
   return incidents.map((inc) => ({
     id: inc.id,

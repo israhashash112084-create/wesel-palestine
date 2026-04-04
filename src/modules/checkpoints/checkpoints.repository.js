@@ -1,6 +1,7 @@
 import { prisma, prismaTransaction, query } from '#database/db.js';
 import { Prisma } from '@prisma/client';
 import { getBoundingBoxByRadiusMeters } from '#shared/utils/geo.js';
+import { TRAFFIC_STATUSES } from '#shared/constants/enums.js'
 
 const CHECKPOINT_REPO_ERROR_CODES = {
   NOT_FOUND: 'CHECKPOINT_REPO_NOT_FOUND',
@@ -703,6 +704,38 @@ export class CheckpointsRepository {
       await tx.checkpoint.delete({
         where: { id },
       });
+    });
+  }
+
+  async findCheckpointsByArea() {
+   return prisma.checkpoint.findMany({
+    where: {
+      status: {
+        in: [TRAFFIC_STATUSES.CLOSED, TRAFFIC_STATUSES.SLOW],
+      },
+    },
+    select: {
+      status: true,
+      city: true,
+    },
+  });
+}
+
+async findActiveCheckpoints() {
+  return await prisma.checkpoint.findMany({
+      where: {
+        status: {
+          in: [TRAFFIC_STATUSES.CLOSED, TRAFFIC_STATUSES.SLOW],
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+        status:    true,
+        city:  true,
+      },
     });
   }
 }
