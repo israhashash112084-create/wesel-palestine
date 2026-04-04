@@ -738,4 +738,17 @@ async findActiveCheckpoints() {
       },
     });
   }
+
+  async findAllCheckpointsForRouting() {
+  return prisma.checkpoint.findMany({
+    select: {
+      id: true,
+      name: true,
+      latitude: true,
+      longitude: true,
+      status: true,
+      city: true,
+    },
+  });
+}
 }

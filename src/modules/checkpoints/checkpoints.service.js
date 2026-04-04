@@ -78,9 +78,10 @@ const _invalidateCheckpointCache = async (checkpointId) => {
 };
 
 export class CheckpointsService {
-  constructor(checkpointsRepository) {
+  constructor(checkpointsRepository, deps = {}) {
     this.repo = checkpointsRepository;
     this.duplicateRadiusMeters = DUPLICATE_RADIUS_METERS.checkpoints;
+    this.routeCacheRepository = deps.routeCacheRepository;
   }
 
   _formatLog(action, stage, context = {}) {
@@ -580,6 +581,25 @@ export class CheckpointsService {
 
         await _invalidateCheckpointCache(id);
 
+       /* await this.routeCacheRepository?.invalidateCachesByCheckpointOrArea({
+          checkpointId: updatedCheckpoint.id,
+          area: updatedCheckpoint.city,
+          });*/
+
+         
+       const invalidationResult =
+         await this.routeCacheRepository?.invalidateCachesByCheckpointOrArea({
+         checkpointId: Number(updatedCheckpoint.id),
+         area: updatedCheckpoint.city,
+      });
+
+        console.log('ROUTE CACHE REPOSITORY EXISTS:', !!this.routeCacheRepository);
+        console.log('INVALIDATION INPUT:', {
+          checkpointId: Number(updatedCheckpoint.id),
+          area: updatedCheckpoint.city,
+        });
+        console.log('INVALIDATION RESULT:', invalidationResult);
+
         return updatedCheckpoint;
       }
     );
@@ -669,5 +689,9 @@ async getActiveCheckpoints() {
 
 async getCheckpointsByArea() {
   return this.repo.findCheckpointsByArea();
+}
+
+async getAllCheckpointsForRouting() {
+  return this.repo.findAllCheckpointsForRouting();
 }
 }

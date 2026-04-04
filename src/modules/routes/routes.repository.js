@@ -11,12 +11,14 @@ export class RoutesRepository {
     });
   }
 
-  async saveCache({ cacheKey, fromLat, fromLng, toLat, toLng, responseData, expiresAt }) {
+  async saveCache({ cacheKey, fromLat, fromLng, toLat, toLng, responseData, expiresAt, checkpointsIds = [], areas = []}) {
     await prisma.routeCache.upsert({
       where: { cacheKey },
       update: {
         responseData,
         expiresAt,
+        checkpointsIds,
+        areas,
         updatedAt: new Date(),
       },
       create: {
@@ -27,6 +29,8 @@ export class RoutesRepository {
         toLng,
         responseData,
         expiresAt,
+        checkpointsIds,
+        areas,
       },
     });
   }

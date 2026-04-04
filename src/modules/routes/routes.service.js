@@ -228,10 +228,16 @@ export class RoutesService {
      //  return _formatRouteResponse(cached.responseData, true);
     }
 
-    const [allCheckpoints, allIncidents] = await Promise.all([
+    /*const [allCheckpoints, allIncidents] = await Promise.all([
       this.checkpointsService.getActiveCheckpoints(),
       this.incidentsService.getActiveIncidents(),
-    ]);
+    ]);*/
+
+    const [allCheckpointsForRouting, activeCheckpoints, allIncidents] = await Promise.all([
+      this.checkpointsService.getAllCheckpointsForRouting(),
+      this.checkpointsService.getActiveCheckpoints(),
+      this.incidentsService.getActiveIncidents(),
+   ]);
 
     let distanceKm, durationMinutes, geometry, isFallback;
     isFallback = false;
@@ -265,7 +271,7 @@ try {
   const osrm = await getOsrmRoutes(from, to);
   console.log('OSRM route count:', osrm.routes.length);
 
-  const checkpointsToAvoid = allCheckpoints.filter((cp) =>
+  const checkpointsToAvoid = allCheckpointsForRouting.filter((cp) =>
     avoid_checkpoints.includes(cp.id)
   );
 
@@ -420,7 +426,7 @@ if (!selectedRoute && areaBoxes.length > 0) {
     errorMessage: 'OSRM unavailable — using Haversine fallback',
   });
 }
-    const checkpointsOnRoute = allCheckpoints.filter((cp) => {
+    /*const checkpointsOnRoute = allCheckpoints.filter((cp) => {
     if (!selectedGeometry) return false;
 
    const passes = routePassesNearPoint(
@@ -435,7 +441,35 @@ if (!selectedRoute && areaBoxes.length > 0) {
   }
 
   return passes;
-   });
+   });*/
+
+   const allCheckpointsOnRoute = allCheckpointsForRouting.filter((cp) => {
+  if (!selectedGeometry) return false;
+
+  const passes = routePassesNearPoint(
+    selectedGeometry,
+    Number(cp.latitude),
+    Number(cp.longitude),
+    1.5
+  );
+
+  if (passes) {
+    console.log('Checkpoint ON ROUTE:', cp.id, cp.name, 'status:', cp.status);
+  }
+
+  return passes;
+});
+
+const checkpointsOnRoute = activeCheckpoints.filter((cp) => {
+  if (!selectedGeometry) return false;
+
+  return routePassesNearPoint(
+    selectedGeometry,
+    Number(cp.latitude),
+    Number(cp.longitude),
+    1.5
+  );
+});
 
   const incidentsOnRoute = allIncidents.filter((inc) => {
      if (!selectedGeometry) return false;
@@ -607,7 +641,14 @@ for (const cp of checkpointsOnRoute) {
        factors,
      },
   };
-  
+
+  //const checkpointsIds = checkpointsOnRoute.map((cp) => cp.id);
+  const checkpointsIds = allCheckpointsOnRoute.map((cp) => cp.id);
+  const areas = [
+  ...checkpointsOnRoute.map((cp) => _normalizeArea(cp.city)).filter(Boolean),
+  ...incidentsOnRoute.map((inc) => _normalizeArea(inc.area)).filter(Boolean),
+  ];
+  const uniqueAreas = [...new Set(areas)];
 
     await this.routesRepository.saveCache({
       cacheKey,
@@ -617,6 +658,8 @@ for (const cp of checkpointsOnRoute) {
       toLng: to.lng,
       responseData,
       expiresAt,
+      checkpointsIds,
+      areas: uniqueAreas,
     });
 
   if(saveHistory){
