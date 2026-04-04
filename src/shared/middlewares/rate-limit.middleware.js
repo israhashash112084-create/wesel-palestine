@@ -105,7 +105,8 @@ export const checkAreaReportLimit = async (userId, area) => {
   if (!area || typeof area !== 'string') {
     return;
   }
-  
+};
+
 const buildAreaReportLimitKey = (userId, area) => {
   const normalizedArea = area.trim().toLowerCase();
   return `area_report_limit:${userId}:${normalizedArea}`;
@@ -191,5 +192,10 @@ export const checkAreaIncidentLimit = async (userId, area) => {
 
 export const areaIncidentLimiter = async (req, _res, next) => {
   await checkAreaIncidentLimit(req.userInfo.id, req.body.area);
+  next();
+};
+
+export const areaReportLimiter = async (req, _res, next) => {
+  await checkAreaReportLimit(req.userInfo.id, req.body.area);
   next();
 };

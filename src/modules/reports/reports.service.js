@@ -837,7 +837,7 @@ export class ReportsService {
     if (report.status === REPORT_STATUSES.REJECTED && body.action === 'reject') {
       throw new BadRequestError('Report is already rejected');
     }
-  }
+  
 
     if (body.action === 'approve') {
       const approved = await this._approveReport(report, moderatorId, body.reason ?? null);

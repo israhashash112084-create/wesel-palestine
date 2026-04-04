@@ -169,9 +169,8 @@ export class RoutesRepository {
       },
     };
   }
-}
 
-async findCheckpointsByArea() {
+  async findCheckpointsByArea() {
   return prisma.checkpoint.findMany({
     where: {
       status: {
@@ -259,3 +258,4 @@ async deleteRouteById(id, userId) {
 }
 
 }
+
