@@ -12,6 +12,15 @@ export class CheckpointsController {
     });
   };
 
+  getNearbyCheckpoints = async (req, res) => {
+    const result = await this.checkpointsService.getNearbyCheckpoints(req.query);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
   createCheckpoint = async (req, res) => {
     const result = await this.checkpointsService.createCheckpoint(req.userInfo, req.body);
 

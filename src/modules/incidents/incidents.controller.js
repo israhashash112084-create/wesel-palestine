@@ -8,6 +8,11 @@ export class IncidentsController {
     res.status(200).json({ success: true, data: incidents });
   };
 
+  getNearbyIncidents = async (req, res) => {
+    const incidents = await this.incidentService.getNearbyIncidents(req.query);
+    res.status(200).json({ success: true, data: incidents });
+  };
+
   getIncidentById = async (req, res) => {
     const { id } = req.params;
     const incident = await this.incidentService.getIncidentById(id);
@@ -33,7 +38,7 @@ export class IncidentsController {
 
   getIncidentReports = async (req, res) => {
     const { id } = req.params;
-    const reports = await this.incidentService.getIncidentReports(id);
+    const reports = await this.incidentService.getIncidentReports(id, req.query);
     res.status(200).json({ success: true, data: reports });
   };
 

@@ -2,6 +2,12 @@
 
 commit_msg=$(cat "$1")
 
+# Allow default merge commit messages, e.g.
+# Merge branch 'feature/x' into feature/y
+if echo "$commit_msg" | grep -qE "^Merge( .+)?$"; then
+  exit 0
+fi
+
 # Allowed format: <type>(<scope>): <description>
 # scope is optional, description must be non-empty
 pattern="^(feat|fix|docs|refactor|test|chore)(\(.+\))?: .+"
