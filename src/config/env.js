@@ -22,7 +22,7 @@ export const env = {
   DB_PASSWORD: required('DB_PASSWORD'),
   DB_NAME: required('DB_NAME'),
   DB_SSL: optional('DB_SSL', 'false') === 'true',
-  DB_MAX_POOL_SIZE: optional('DB_MAX_POOL_SIZE', '10'),
+  DB_POOL_MAX_SIZE: optional('DB_POOL_MAX_SIZE', optional('DB_MAX_POOL_SIZE', '10')),
 
   JWT_ACCESS_SECRET: required('JWT_ACCESS_SECRET'),
   JWT_REFRESH_SECRET: required('JWT_REFRESH_SECRET'),

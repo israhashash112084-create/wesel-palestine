@@ -29,6 +29,8 @@ import { CheckpointsRepository } from '#modules/checkpoints/checkpoints.reposito
 import { CheckpointsService } from '#modules/checkpoints/checkpoints.service.js';
 import { CheckpointsController } from '#modules/checkpoints/checkpoints.controller.js';
 
+import { RouteCacheRepository } from '#shared/cache/route-cache.repository.js';
+
 const router = Router();
 
 // Single composition root for v1 API: instantiate once and share across routers.
@@ -36,12 +38,14 @@ const alertsRepository = new AlertsRepository();
 const alertsService = new AlertsService(alertsRepository);
 const alertsController = new AlertsController(alertsService);
 
+const routeCacheRepository = new RouteCacheRepository();
+
 const incidentsRepository = new IncidentsRepository();
 const incidentsService = new IncidentsService(incidentsRepository, alertsService);
 const incidentsController = new IncidentsController(incidentsService);
 
 const checkpointsRepository = new CheckpointsRepository();
-const checkpointsService = new CheckpointsService(checkpointsRepository);
+const checkpointsService = new CheckpointsService(checkpointsRepository, { routeCacheRepository });
 const checkpointsController = new CheckpointsController(checkpointsService);
 
 const reportsRepository = new ReportsRepository();
@@ -54,7 +58,7 @@ const reportsController = new ReportsController(reportsService);
 incidentsService.setReportsService(reportsService);
 
 const routesRepository = new RoutesRepository();
-const routesService = new RoutesService(routesRepository);
+const routesService = new RoutesService(routesRepository, { checkpointsService, incidentsService });
 const routesController = new RoutesController(routesService);
 
 const authRepository = new AuthRepository();

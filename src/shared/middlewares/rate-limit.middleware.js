@@ -101,8 +101,6 @@ export const authMeLimiter = createRateLimiter({
   message: `Too many profile requests. Try again after ${parseInt(env.AUTH_ME_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
 
-
-  
 const buildAreaReportLimitKey = (userId, area) => {
   const normalizedArea = area.trim().toLowerCase();
   return `area_report_limit:${userId}:${normalizedArea}`;

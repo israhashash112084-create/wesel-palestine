@@ -570,4 +570,34 @@ export class IncidentsRepository {
       },
     };
   }
+
+  async findActiveIncidents() {
+    return await prisma.incident.findMany({
+      where: {
+        status: INCIDENT_STATUSES.VERIFIED,
+        // isVerified: true,
+      },
+      select: {
+        id: true,
+        type: true,
+        severity: true,
+        locationLat: true,
+        locationLng: true,
+        checkpointId: true,
+        area: true,
+      },
+    });
+  }
+
+  async findIncidentsByArea() {
+    return prisma.incident.findMany({
+      where: {
+        status: INCIDENT_STATUSES.VERIFIED,
+      },
+      select: {
+        severity: true,
+        area: true,
+      },
+    });
+  }
 }
