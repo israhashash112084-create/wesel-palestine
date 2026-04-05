@@ -1,5 +1,5 @@
 import { prisma } from '#database/db.js';
-import { CHECKPOINT_STATUSES, INCIDENT_STATUSES } from '#shared/constants/enums.js';
+import { TRAFFIC_STATUSES, INCIDENT_STATUSES } from '#shared/constants/enums.js';
 
 export class RoutesRepository {
   async findCache(cacheKey) {
@@ -39,10 +39,10 @@ export class RoutesRepository {
   }
 
   async findActiveCheckpoints() {
-    return await prisma.checkpoints.findMany({
+    return await prisma.checkpoint.findMany({
       where: {
         status: {
-          in: [CHECKPOINT_STATUSES.CLOSED, CHECKPOINT_STATUSES.SLOW],
+          in: [TRAFFIC_STATUSES.CLOSED, TRAFFIC_STATUSES.SLOW],
         },
       },
       select: {
@@ -50,17 +50,17 @@ export class RoutesRepository {
         name: true,
         latitude: true,
         longitude: true,
-        status: true,
-        areaName: true,
+        status:    true,
+        city:  true,
       },
     });
   }
 
   async findActiveIncidents() {
-    return await prisma.incidents.findMany({
+    return await prisma.incident.findMany({
       where: {
-        status: INCIDENT_STATUSES.VERIFIED,
-        isVerified: true,
+        status:     INCIDENT_STATUSES.VERIFIED,
+       // isVerified: true,
       },
       select: {
         id: true,
@@ -169,4 +169,93 @@ export class RoutesRepository {
       },
     };
   }
+}
+
+async findCheckpointsByArea() {
+  return prisma.checkpoint.findMany({
+    where: {
+      status: {
+        in: [TRAFFIC_STATUSES.CLOSED, TRAFFIC_STATUSES.SLOW],
+      },
+    },
+    select: {
+      status: true,
+      city: true,
+    },
+  });
+}
+
+async findIncidentsByArea() {
+  return prisma.incident.findMany({
+    where: {
+      status: INCIDENT_STATUSES.VERIFIED,
+    },
+    select: {
+      severity: true,
+      area: true,
+    },
+  });
+}
+
+async getUserRouteHistoryStats(userId) {
+  return prisma.routeHistory.aggregate({
+    where: { userId },
+    _count: {
+      id: true,
+    },
+    _sum: {
+      distanceKm: true,
+      totalDelayMinutes: true,
+    },
+    _avg: {
+      totalDelayMinutes: true,
+    },
+  });
+}
+
+async countUserFallbackRoutes(userId) {
+  return prisma.routeHistory.count({
+    where: {
+      userId,
+      isFallback: true,
+    },
+  });
+}
+
+async findMostVisitedRoute(userId) {
+  const groupedRoutes = await prisma.routeHistory.groupBy({
+    by: ['fromLat', 'fromLng', 'toLat', 'toLng'],
+    where: { userId },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _count: {
+        id: 'desc',
+      },
+    },
+    take: 1,
+  });
+
+  return groupedRoutes[0] ?? null;
+}
+
+async findRouteById(id, userId) {
+  return prisma.routeHistory.findFirst({
+    where: {
+      id,
+      userId, 
+    },
+  });
+}
+
+async deleteRouteById(id, userId) {
+  return prisma.routeHistory.deleteMany({
+    where: {
+      id,
+      userId,
+    },
+  });
+}
+
 }

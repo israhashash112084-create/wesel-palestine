@@ -1,8 +1,9 @@
 import { rateLimit } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
-import redisClient from '#shared/utils/radis.js';
+import redisClient, { isRedisAvailable } from '#shared/utils/radis.js';
 import { env } from '#config/env.js';
 import { ConflictError } from '#shared/utils/errors.js';
+import { logger } from '#shared/utils/logger.js';
 
 /**
  * @param {{ max: number, windowSec: number, message?: string }} options
@@ -13,6 +14,7 @@ const createRateLimiter = ({ max, windowSec, message }) => {
     max,
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     keyGenerator: (req) => req.userInfo?.id ?? req.ip,
     handler: (_req, res) => {
       res.status(429).json({
@@ -22,10 +24,12 @@ const createRateLimiter = ({ max, windowSec, message }) => {
     },
   };
 
-  if (redisClient) {
+  if (isRedisAvailable()) {
     options.store = new RedisStore({
       sendCommand: (...args) => redisClient.sendCommand(args),
     });
+  } else {
+    logger.warn('[rate-limit] redis unavailable; using in-memory limiter store');
   }
 
   return rateLimit(options);
@@ -41,6 +45,24 @@ export const incidentSubmitLimiter = createRateLimiter({
   max: parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
   windowSec: parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 1000,
   message: `You can only submit ${env.RATE_LIMIT_MAX_REQUESTS} incidents every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
+export const checkpointCreateLimiter = createRateLimiter({
+  max: parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `You can only create ${env.RATE_LIMIT_MAX_REQUESTS} checkpoints every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
+export const checkpointUpdateLimiter = createRateLimiter({
+  max: parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `You can only update ${env.RATE_LIMIT_MAX_REQUESTS} checkpoints every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
+});
+
+export const checkpointDeleteLimiter = createRateLimiter({
+  max: parseInt(env.RATE_LIMIT_MAX_REQUESTS, 10),
+  windowSec: parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 1000,
+  message: `You can only delete ${env.RATE_LIMIT_MAX_REQUESTS} checkpoints every ${parseInt(env.RATE_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
 
 export const routeEstimateLimiter = createRateLimiter({
@@ -79,34 +101,41 @@ export const authMeLimiter = createRateLimiter({
   message: `Too many profile requests. Try again after ${parseInt(env.AUTH_ME_LIMIT_WINDOW_MS, 10) / 60000} minutes.`,
 });
 
-export const checkAreaReportLimit = async (userId, area) => {
-  if (!area || typeof area !== 'string') {
-    return;
-  }
 
+  
+const buildAreaReportLimitKey = (userId, area) => {
   const normalizedArea = area.trim().toLowerCase();
-  const key = `area_report_limit:${userId}:${normalizedArea}`;
+  return `area_report_limit:${userId}:${normalizedArea}`;
+};
 
-  const count = await redisClient.incr(key);
+export const ensureAreaReportLimit = async (userId, area) => {
+  if (!area || typeof area !== 'string') return;
 
-  if (count === 1) {
-    await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
-  }
+  const key = buildAreaReportLimitKey(userId, area);
+  const rawCount = await redisClient.get(key);
+  const count = Number(rawCount ?? 0);
+  const maxAllowed = Number(env.AREA_REPORT_LIMIT_MAX);
 
-  if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
+  if (count >= maxAllowed) {
     const ttl = await redisClient.ttl(key);
-    const hoursLeft = Math.ceil(ttl / 3600);
+    const hoursLeft = ttl > 0 ? Math.ceil(ttl / 3600) : 0;
 
     throw new ConflictError(
-      `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} reports for "${area}". ` +
+      `You have reached the maximum of ${maxAllowed} reports for "${area}". ` +
         `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
     );
   }
 };
 
-export const areaReportLimiter = async (req, _res, next) => {
-  await checkAreaReportLimit(req.userInfo.id, req.body.area);
-  next();
+export const incrementAreaReportLimit = async (userId, area) => {
+  if (!area || typeof area !== 'string') return;
+
+  const key = buildAreaReportLimitKey(userId, area);
+  const count = await redisClient.incr(key);
+
+  if (count === 1) {
+    await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+  }
 };
 
 export const checkAreaIncidentLimit = async (userId, area) => {
@@ -117,20 +146,43 @@ export const checkAreaIncidentLimit = async (userId, area) => {
   const normalizedArea = area.trim().toLowerCase();
   const key = `area_incident_limit:${userId}:${normalizedArea}`;
 
-  const count = await redisClient.incr(key);
+  let count;
 
-  if (count === 1) {
-    await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+  try {
+    count = await redisClient.incr(key);
+  } catch (error) {
+    logger.warn('[rate-limit] area incident limiter degraded: redis unavailable', {
+      userId,
+      area: normalizedArea,
+      error: error.message,
+    });
+    return;
   }
 
-  if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
-    const ttl = await redisClient.ttl(key);
-    const hoursLeft = Math.ceil(ttl / 3600);
+  try {
+    if (count === 1) {
+      await redisClient.expire(key, Number(env.AREA_REPORT_LIMIT_TTL_SEC));
+    }
 
-    throw new ConflictError(
-      `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} incidents for "${area}". ` +
-        `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
-    );
+    if (count > Number(env.AREA_REPORT_LIMIT_MAX)) {
+      const ttl = await redisClient.ttl(key);
+      const hoursLeft = Math.ceil(ttl / 3600);
+
+      throw new ConflictError(
+        `You have reached the maximum of ${env.AREA_REPORT_LIMIT_MAX} incidents for "${area}". ` +
+          `Try again in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}.`
+      );
+    }
+  } catch (error) {
+    if (error instanceof ConflictError) {
+      throw error;
+    }
+
+    logger.warn('[rate-limit] area incident limiter degraded after increment', {
+      userId,
+      area: normalizedArea,
+      error: error.message,
+    });
   }
 };
 

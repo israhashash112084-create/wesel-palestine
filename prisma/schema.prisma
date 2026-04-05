@@ -73,6 +73,7 @@ model Checkpoint {
   updatedAt     DateTime                  @updatedAt @map("updated_at")
 
   @@index([latitude, longitude], map: "idx_checkpoints_location")
+  @@unique([latitude, longitude], map: "uq_checkpoints_lat_lng_exact")
   @@index([city], map: "idx_checkpoints_city")
   @@index([area], map: "idx_checkpoints_area")
   @@map("checkpoints")

@@ -18,20 +18,20 @@ const type = Joi.string()
   .valid(...VALID_TYPES)
   .messages({
     'any.only': `type must be one of: ${VALID_TYPES.join(', ')}`,
-    'any.required': 'type is required',
+    //'any.required': 'type is required',
   });
 
 const severity = Joi.string()
   .valid(...VALID_SEVERITIES)
   .messages({
     'any.only': `severity must be one of: ${VALID_SEVERITIES.join(', ')}`,
-    'any.required': 'severity is required',
+    //'any.required': 'severity is required',
   });
 
 const description = Joi.string().min(10).max(1000).messages({
   'string.min': 'description must be at least 10 characters',
   'string.max': 'description must not exceed 1000 characters',
-  'any.required': 'description is required',
+  // 'any.required': 'description is required',
 });
 
 const checkpointId = Joi.number().integer().min(1).messages({
@@ -180,7 +180,7 @@ export const reportIdSchema = Joi.object({
 
 export const moderateReportSchema = Joi.object({
   action: Joi.string().valid('approve', 'reject').required().messages({
-    'any.only': 'action must be either approved or rejected',
+    'any.only': 'action must be either approve or reject',
     'any.required': 'action is required',
   }),
 
