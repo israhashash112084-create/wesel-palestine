@@ -5,6 +5,17 @@ export const limitQuerySchema = Joi.number().integer().min(1).max(100).default(1
 export const sortOrderQuerySchema = Joi.string().valid('asc', 'desc').default('desc');
 export const positiveIntegerIdSchema = Joi.number().integer().positive().required();
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const uuidBaseSchema = Joi.string().trim().pattern(UUID_REGEX).messages({
+  'string.base': '{{#label}} must be a string',
+  'string.empty': '{{#label}} must not be empty',
+  'string.pattern.base': '{{#label}} must be a valid UUID',
+});
+
+export const uuidSchema = uuidBaseSchema.required();
+export const optionalUuidSchema = uuidBaseSchema.optional();
+
 export const latitudeSchema = Joi.number().min(31.2).max(32.6).messages({
   'number.base': 'latitude must be a number',
   'number.min': 'latitude must be within West Bank boundaries [31.2, 32.6]',

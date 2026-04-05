@@ -9,6 +9,7 @@ import {
   limitQuerySchema,
   sortOrderQuerySchema,
   positiveIntegerIdSchema,
+  optionalUuidSchema,
   latitudeSchema,
   longitudeSchema,
 } from '#shared/utils/query-validator.js';
@@ -79,7 +80,7 @@ export const listIncidentsSchema = Joi.object({
     .valid(...trafficStatuses)
     .optional(),
   checkpointId: positiveIntegerIdSchema.optional(),
-  reportedBy: positiveIntegerIdSchema.optional(),
+  reportedBy: optionalUuidSchema,
   fromDate: Joi.date().iso().optional(),
   toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
     'date.greater': 'toDate must be greater than fromDate',
@@ -91,7 +92,7 @@ export const listIncidentsSchema = Joi.object({
 });
 
 export const incidentHistoryQuerySchema = Joi.object({
-  changedBy: positiveIntegerIdSchema.optional(),
+  changedBy: optionalUuidSchema,
   oldStatus: Joi.string()
     .valid(...incidentStatuses)
     .optional(),
