@@ -357,7 +357,11 @@ export class CheckpointsService {
           });
 
           await _invalidateCheckpointCache(createdCheckpoint.id);
-
+          
+          await this.routeCacheRepository?.invalidateCachesByCheckpointOrArea({
+             area: createdCheckpoint.city,
+          });
+ 
           return createdCheckpoint;
         } catch (error) {
           if (
@@ -679,6 +683,10 @@ export class CheckpointsService {
         }
 
         await _invalidateCheckpointCache(id);
+        await this.routeCacheRepository?.invalidateCachesByCheckpointOrArea({
+          area: checkpoint.city,
+        });
+  
       }
     );
   }
