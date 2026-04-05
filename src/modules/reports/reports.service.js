@@ -7,10 +7,6 @@ import {
 import { getPaginationParams } from '#shared/utils/pagination.js';
 import { UserRoles } from '#shared/constants/roles.js';
 import { INCIDENT_TYPES, REPORT_STATUSES, MODERATION_ACTIONS } from '#shared/constants/enums.js';
-import { CheckpointsService } from '#modules/checkpoints/checkpoints.service.js';
-import { CheckpointsRepository } from '#modules/checkpoints/checkpoints.repository.js';
-import { IncidentsService } from '#modules/incidents/incidents.service.js';
-import { IncidentsRepository } from '#modules/incidents/incidents.repository.js';
 import { normalizeLocation, buildLocationQuery } from '#shared/utils/location-normalizer.js';
 import { env } from '#config/env.js';
 import { logger } from '#shared/utils/logger.js';
@@ -277,7 +273,7 @@ export class ReportsService {
 
     if (rootReport.incidentId) {
       const actor = moderatorId ? { id: moderatorId } : systemUser();
-      await incidentsService.verifyIncident(
+      await this.incidentsService.verifyIncident(
         rootReport.incidentId,
         actor,
         reason ?? 'Verified via report'
@@ -311,7 +307,7 @@ export class ReportsService {
 
     if (rootReport.incidentId) {
       const actor = moderatorId ? { id: moderatorId } : systemUser();
-      await incidentsService.rejectIncident(rootReport.incidentId, actor);
+      await this.incidentsService.rejectIncident(rootReport.incidentId, actor);
     }
 
     await scheduleScoreAdjustment(rootReport.id, 'decrease');
@@ -769,7 +765,7 @@ export class ReportsService {
     });
 
     if (!wasDuplicate && !isNowDuplicate && updatedReport.incidentId) {
-      await incidentsService.updateIncident(
+      await this.incidentsService.updateIncident(
         updatedReport.incidentId,
         {
           locationLat,
@@ -837,7 +833,6 @@ export class ReportsService {
     if (report.status === REPORT_STATUSES.REJECTED && body.action === 'reject') {
       throw new BadRequestError('Report is already rejected');
     }
-  }
 
     if (body.action === 'approve') {
       const approved = await this._approveReport(report, moderatorId, body.reason ?? null);

@@ -17,15 +17,14 @@ import {
 import { UserRoles } from '#shared/constants/roles.js';
 
 export const createReportsRouter = ({ reportsController }) => {
-  const router = Router();
-  router.post(
-    '/',
-    authenticate,
-    reportSubmitLimiter,
-    validateRequest(ReportSchema, 'body'),
-    areaReportLimiter,
-    reportsController.submitReport
-  );
+const router = Router();
+router.post(
+  '/',
+  authenticate,
+  validateRequest(ReportSchema, 'body'),
+  reportSubmitLimiter,
+  reportsController.submitReport
+);
   router.get(
     '/',
     optionalAuthenticate,
