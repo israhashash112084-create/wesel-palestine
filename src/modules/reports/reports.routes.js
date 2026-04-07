@@ -5,10 +5,7 @@ import {
   authorize,
 } from '#shared/middlewares/auth.middleware.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
-import {
-  reportSubmitLimiter,
-  areaReportLimiter,
-} from '#shared/middlewares/rate-limit.middleware.js';
+import { reportSubmitLimiter } from '#shared/middlewares/rate-limit.middleware.js';
 import {
   ReportSchema,
   updateReportSchema,
@@ -20,15 +17,14 @@ import {
 import { UserRoles } from '#shared/constants/roles.js';
 
 export const createReportsRouter = ({ reportsController }) => {
-  const router = Router();
-  router.post(
-    '/',
-    authenticate,
-    reportSubmitLimiter,
-    validateRequest(ReportSchema, 'body'),
-    areaReportLimiter,
-    reportsController.submitReport
-  );
+const router = Router();
+router.post(
+  '/',
+  authenticate,
+  validateRequest(ReportSchema, 'body'),
+  reportSubmitLimiter,
+  reportsController.submitReport
+);
   router.get(
     '/',
     optionalAuthenticate,

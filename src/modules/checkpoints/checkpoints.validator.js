@@ -5,15 +5,16 @@ import {
   limitQuerySchema,
   sortOrderQuerySchema,
   positiveIntegerIdSchema,
-  westBankLatitudeSchema,
-  westBankLongitudeSchema,
+  optionalUuidSchema,
+  latitudeSchema,
+  longitudeSchema,
 } from '#shared/utils/query-validator.js';
 
 const checkpointStatuses = Object.values(CHECKPOINT_STATUSES);
 
-const latitudeBounds = westBankLatitudeSchema;
+const latitudeBounds = latitudeSchema;
 
-const longitudeBounds = westBankLongitudeSchema;
+const longitudeBounds = longitudeSchema;
 
 export const listCheckpointsSchema = Joi.object({
   status: Joi.string()
@@ -126,12 +127,7 @@ export const nearbyCheckpointsQuerySchema = Joi.object({
 });
 
 export const checkpointStatusHistoryQuerySchema = Joi.object({
-  changedBy: Joi.string()
-    .pattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
-    .optional()
-    .messages({
-      'string.pattern.base': 'changedBy must be a valid UUID',
-    }),
+  changedBy: optionalUuidSchema,
   oldStatus: Joi.string()
     .valid(...checkpointStatuses)
     .optional(),

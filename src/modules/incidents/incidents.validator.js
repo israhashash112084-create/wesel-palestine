@@ -9,8 +9,9 @@ import {
   limitQuerySchema,
   sortOrderQuerySchema,
   positiveIntegerIdSchema,
-  westBankLatitudeSchema,
-  westBankLongitudeSchema,
+  optionalUuidSchema,
+  latitudeSchema,
+  longitudeSchema,
 } from '#shared/utils/query-validator.js';
 
 const incidentTypes = Object.values(INCIDENT_TYPES);
@@ -19,11 +20,11 @@ const trafficStatuses = Object.values(TRAFFIC_STATUSES);
 const incidentStatuses = Object.values(INCIDENT_STATUSES);
 const reportStatuses = Object.values(REPORT_STATUSES);
 
-const locationLatSchema = westBankLatitudeSchema.messages({
+const locationLatSchema = latitudeSchema.messages({
   'any.required': 'Location latitude is required',
 });
 
-const locationLngSchema = westBankLongitudeSchema.messages({
+const locationLngSchema = longitudeSchema.messages({
   'any.required': 'Location longitude is required',
 });
 
@@ -79,7 +80,7 @@ export const listIncidentsSchema = Joi.object({
     .valid(...trafficStatuses)
     .optional(),
   checkpointId: positiveIntegerIdSchema.optional(),
-  reportedBy: positiveIntegerIdSchema.optional(),
+  reportedBy: optionalUuidSchema,
   fromDate: Joi.date().iso().optional(),
   toDate: Joi.date().iso().greater(Joi.ref('fromDate')).optional().messages({
     'date.greater': 'toDate must be greater than fromDate',
@@ -91,7 +92,7 @@ export const listIncidentsSchema = Joi.object({
 });
 
 export const incidentHistoryQuerySchema = Joi.object({
-  changedBy: positiveIntegerIdSchema.optional(),
+  changedBy: optionalUuidSchema,
   oldStatus: Joi.string()
     .valid(...incidentStatuses)
     .optional(),
@@ -122,10 +123,10 @@ export const incidentReportsQuerySchema = Joi.object({
 });
 
 export const nearbyIncidentsSchema = Joi.object({
-  lat: westBankLatitudeSchema.required().messages({
+  lat: latitudeSchema.required().messages({
     'any.required': 'Latitude is required',
   }),
-  lng: westBankLongitudeSchema.required().messages({
+  lng: longitudeSchema.required().messages({
     'any.required': 'Longitude is required',
   }),
   radiusMeters: Joi.number().integer().min(1).max(50000).default(500),

@@ -1,5 +1,4 @@
 import { prisma } from '#database/db.js';
-import { TRAFFIC_STATUSES, INCIDENT_STATUSES } from '#shared/constants/enums.js';
 
 export class RoutesRepository {
   async findCache(cacheKey) {
@@ -11,7 +10,17 @@ export class RoutesRepository {
     });
   }
 
-  async saveCache({ cacheKey, fromLat, fromLng, toLat, toLng, responseData, expiresAt, checkpointsIds = [], areas = []}) {
+  async saveCache({
+    cacheKey,
+    fromLat,
+    fromLng,
+    toLat,
+    toLng,
+    responseData,
+    expiresAt,
+    checkpointsIds = [],
+    areas = [],
+  }) {
     await prisma.routeCache.upsert({
       where: { cacheKey },
       update: {
@@ -41,7 +50,6 @@ export class RoutesRepository {
       data: { hitCount: { increment: 1 } },
     });
   }
-
 
   async logApiCall({ service, endpoint, statusCode, responseTimeMs, isFallback, errorMessage }) {
     await prisma.externalApiLog.create({

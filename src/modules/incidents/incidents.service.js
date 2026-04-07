@@ -815,4 +815,11 @@ export class IncidentsService {
       }
     );
   }
+  async getActiveIncidents() {
+    return this.repo.findActiveIncidents();
+  }
+
+  async getIncidentsByArea() {
+    return this.repo.findIncidentsByArea();
+  }
 }
