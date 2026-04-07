@@ -1,13 +1,23 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '#shared/middlewares/auth.middleware.js';
+import {
+  authenticate,
+  optionalAuthenticate,
+  authorize,
+} from '#shared/middlewares/auth.middleware.js';
 import { UserRoles } from '#shared/constants/roles.js';
 import { validateRequest } from '#shared/middlewares/validate.middleware.js';
+import {
+  checkpointCreateLimiter,
+  checkpointDeleteLimiter,
+  checkpointUpdateLimiter,
+} from '#shared/middlewares/rate-limit.middleware.js';
 import {
   listCheckpointsSchema,
   checkpointIdParamSchema,
   createCheckpointSchema,
   updateCheckpointSchema,
   updateCheckpointStatusSchema,
+  nearbyCheckpointsQuerySchema,
   checkpointStatusHistoryQuerySchema,
 } from './checkpoints.validator.js';
 
@@ -18,20 +28,28 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     '/',
     authenticate,
     authorize(UserRoles.ADMIN),
+    checkpointCreateLimiter,
     validateRequest(createCheckpointSchema, 'body'),
     checkpointsController.createCheckpoint
   );
 
   router.get(
     '/',
-    authenticate,
+    optionalAuthenticate,
     validateRequest(listCheckpointsSchema, 'query'),
     checkpointsController.getAllCheckpoints
   );
 
   router.get(
+    '/nearby',
+    optionalAuthenticate,
+    validateRequest(nearbyCheckpointsQuerySchema, 'query'),
+    checkpointsController.getNearbyCheckpoints
+  );
+
+  router.get(
     '/:id',
-    authenticate,
+    optionalAuthenticate,
     validateRequest(checkpointIdParamSchema, 'params'),
     checkpointsController.getCheckpointById
   );
@@ -40,6 +58,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     '/:id',
     authenticate,
     authorize(UserRoles.ADMIN),
+    checkpointUpdateLimiter,
     validateRequest(checkpointIdParamSchema, 'params'),
     validateRequest(updateCheckpointSchema, 'body'),
     checkpointsController.updateCheckpoint
@@ -49,6 +68,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     '/:id/status',
     authenticate,
     authorize(UserRoles.ADMIN),
+    checkpointUpdateLimiter,
     validateRequest(checkpointIdParamSchema, 'params'),
     validateRequest(updateCheckpointStatusSchema, 'body'),
     checkpointsController.updateCheckpointStatus
@@ -67,6 +87,7 @@ export const createCheckpointsRouter = ({ checkpointsController }) => {
     '/:id',
     authenticate,
     authorize(UserRoles.ADMIN),
+    checkpointDeleteLimiter,
     validateRequest(checkpointIdParamSchema, 'params'),
     checkpointsController.deleteCheckpoint
   );

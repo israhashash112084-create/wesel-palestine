@@ -275,6 +275,99 @@ export class ReportsRepository {
     });
   }
 
+  async getModerationSnapshot(reportId) {
+    const [primary, duplicates] = await prisma.$transaction([
+      prisma.report.findUnique({
+        where: { id: reportId },
+        select: {
+          id: true,
+          status: true,
+          rejectReason: true,
+          moderatedBy: true,
+          moderatedAt: true,
+        },
+      }),
+      prisma.report.findMany({
+        where: { duplicateOf: reportId },
+        select: {
+          id: true,
+          status: true,
+          rejectReason: true,
+          moderatedBy: true,
+          moderatedAt: true,
+        },
+      }),
+    ]);
+
+    if (!primary) {
+      return null;
+    }
+
+    return {
+      primary,
+      duplicates,
+    };
+  }
+
+  async applyModerationOutcome(
+    reportId,
+    { status, rejectReason = null, moderatedBy = null, moderatedAt }
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const updatedPrimary = await tx.report.update({
+        where: { id: reportId },
+        data: {
+          status,
+          rejectReason,
+          moderatedBy,
+          moderatedAt,
+        },
+      });
+
+      await tx.report.updateMany({
+        where: { duplicateOf: reportId },
+        data: {
+          status,
+          rejectReason,
+          moderatedBy,
+          moderatedAt,
+        },
+      });
+
+      return updatedPrimary;
+    });
+  }
+
+  async restoreModerationSnapshot(snapshot) {
+    if (!snapshot?.primary) {
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.report.update({
+        where: { id: snapshot.primary.id },
+        data: {
+          status: snapshot.primary.status,
+          rejectReason: snapshot.primary.rejectReason,
+          moderatedBy: snapshot.primary.moderatedBy,
+          moderatedAt: snapshot.primary.moderatedAt,
+        },
+      });
+
+      for (const duplicate of snapshot.duplicates ?? []) {
+        await tx.report.update({
+          where: { id: duplicate.id },
+          data: {
+            status: duplicate.status,
+            rejectReason: duplicate.rejectReason,
+            moderatedBy: duplicate.moderatedBy,
+            moderatedAt: duplicate.moderatedAt,
+          },
+        });
+      }
+    });
+  }
+
   async incrementReportConfidenceScore(reportId, increment = 1) {
     await prisma.report.update({
       where: { id: reportId },
@@ -336,6 +429,12 @@ export class ReportsRepository {
   async createAuditLog({ reportId, moderatorId, action, reason }) {
     return prisma.moderationAuditLog.create({
       data: { reportId, moderatorId: moderatorId ?? null, action, reason: reason ?? null },
+    });
+  }
+
+  async deleteAuditLogById(id) {
+    return prisma.moderationAuditLog.delete({
+      where: { id },
     });
   }
 

@@ -79,8 +79,10 @@ export class IncidentsService {
   async _invalidateIncidentsQueryCache() {
     try {
       await redisClient.incr(INCIDENTS_LIST_CACHE_VERSION_KEY);
-    } catch {
-      /* best-effort */
+    } catch (error) {
+      logger.warn('[incidents.service] cache invalidation degraded', {
+        error: error.message,
+      });
     }
   }
 

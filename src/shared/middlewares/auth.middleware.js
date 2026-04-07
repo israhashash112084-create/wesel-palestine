@@ -1,6 +1,6 @@
 import { env } from '#config/env.js';
 import jwt from 'jsonwebtoken';
-import { UnauthorizedError } from '#shared/utils/errors.js';
+import { ForbiddenError, UnauthorizedError } from '#shared/utils/errors.js';
 
 const _verifyToken = (req) => {
   const authHeader = req.headers?.authorization ?? req.headers?.Authorization;
@@ -39,7 +39,7 @@ export const optionalAuthenticate = (req, res, next) => {
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.userInfo || !roles.includes(req.userInfo.role)) {
-      throw new UnauthorizedError('Insufficient permissions');
+      throw new ForbiddenError('Insufficient permissions');
     }
     next();
   };
