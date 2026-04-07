@@ -59,11 +59,19 @@ export class AlertsController {
   };
 
   markAlertAsRead = async (req, res) => {
-    const result = await this.alertsService.markAlertAsRead(req.userInfo.id, Number(req.params.id));
+  const result = await this.alertsService.markAlertAsRead(
+    req.userInfo.id,
+    Number(req.params.id)
+  );
 
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
+  
+
+
+  
 }
+

@@ -54,6 +54,7 @@ const reportsRepository = new ReportsRepository();
 const reportsService = new ReportsService(reportsRepository, {
   incidentsService,
   checkpointsService,
+  alertsService,
 });
 const reportsController = new ReportsController(reportsService);
 

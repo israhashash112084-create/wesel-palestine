@@ -38,8 +38,9 @@ export class ReportsService {
    */
   constructor(reportsRepository, deps) {
     this.repo = reportsRepository;
-    this.incidentsService = deps.incidentsService;
-    this.checkpointsService = deps.checkpointsService;
+  this.incidentsService = deps.incidentsService;
+  this.checkpointsService = deps.checkpointsService;
+  this.alertsService = deps.alertsService;
   }
 
   async getUserStats(userId) {
@@ -838,9 +839,33 @@ export class ReportsService {
       const approved = await this._approveReport(report, moderatorId, body.reason ?? null);
 
       if (!approved) {
+        
+          await this.alertsService.createReportStatusNotifications({
+    ...report,
+    status: 'rejected',
+  });
+
+  console.log('report notifications creation finished (REJECT)');
+
+        
         throw new BadRequestError('Report is no longer pending');
       }
 
+      
+          if (this.alertsService) {
+  console.log('calling createReportStatusNotifications with:', {
+    ...report,
+    status: 'verified',
+  });
+
+  await this.alertsService.createReportStatusNotifications({
+    ...report,
+    status: 'verified',
+  });
+
+  console.log('report notifications creation finished');
+}
+      
       return { message: 'Report approved and incident verified' };
     }
 

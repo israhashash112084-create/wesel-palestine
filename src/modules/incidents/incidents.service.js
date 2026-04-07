@@ -17,6 +17,7 @@ import { UserRoles } from '#shared/constants/roles.js';
 import { distanceBetween, kilometersToMeters } from '#shared/utils/geo.js';
 import { logger } from '#shared/utils/logger.js';
 import redisClient from '#shared/utils/radis.js';
+import { addIncidentAlertsJob } from '#modules/alerts/jobs/alerts.queue.js';
 
 const INCIDENTS_LIST_CACHE_TTL_SEC = 120;
 const INCIDENTS_NEARBY_CACHE_TTL_SEC = 120;
@@ -681,9 +682,7 @@ export class IncidentsService {
           notes
         );
 
-        if (this.alertsService) {
-          await this.alertsService.handleNewIncident(incident);
-        }
+        await addIncidentAlertsJob(incident.id);
 
         logger.info(
           this._formatLog('verifyIncident', 'success', {

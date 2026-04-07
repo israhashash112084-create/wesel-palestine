@@ -110,3 +110,7 @@ export const CHECKPOINT_STATUS_TRANSITIONS = {
     CHECKPOINT_STATUSES.CLOSED,
   ],
 };
+export const ALERT_STATUSES = {
+  PENDING: 'pending',
+  READ: 'read',
+};

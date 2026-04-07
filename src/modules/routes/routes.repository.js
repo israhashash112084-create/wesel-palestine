@@ -147,64 +147,66 @@ export class RoutesRepository {
     };
   }
 
-  async getUserRouteHistoryStats(userId) {
-    return prisma.routeHistory.aggregate({
-      where: { userId },
+
+async getUserRouteHistoryStats(userId) {
+  return prisma.routeHistory.aggregate({
+    where: { userId },
+    _count: {
+      id: true,
+    },
+    _sum: {
+      distanceKm: true,
+      totalDelayMinutes: true,
+    },
+    _avg: {
+      totalDelayMinutes: true,
+    },
+  });
+}
+
+async countUserFallbackRoutes(userId) {
+  return prisma.routeHistory.count({
+    where: {
+      userId,
+      isFallback: true,
+    },
+  });
+}
+
+async findMostVisitedRoute(userId) {
+  const groupedRoutes = await prisma.routeHistory.groupBy({
+    by: ['fromLat', 'fromLng', 'toLat', 'toLng'],
+    where: { userId },
+    _count: {
+      id: true,
+    },
+    orderBy: {
       _count: {
-        id: true,
+        id: 'desc',
       },
-      _sum: {
-        distanceKm: true,
-        totalDelayMinutes: true,
-      },
-      _avg: {
-        totalDelayMinutes: true,
-      },
-    });
-  }
+    },
+    take: 1,
+  });
 
-  async countUserFallbackRoutes(userId) {
-    return prisma.routeHistory.count({
-      where: {
-        userId,
-        isFallback: true,
-      },
-    });
-  }
+  return groupedRoutes[0] ?? null;
+}
 
-  async findMostVisitedRoute(userId) {
-    const groupedRoutes = await prisma.routeHistory.groupBy({
-      by: ['fromLat', 'fromLng', 'toLat', 'toLng'],
-      where: { userId },
-      _count: {
-        id: true,
-      },
-      orderBy: {
-        _count: {
-          id: 'desc',
-        },
-      },
-      take: 1,
-    });
+async findRouteById(id, userId) {
+  return prisma.routeHistory.findFirst({
+    where: {
+      id,
+      userId, 
+    },
+  });
+}
 
-    return groupedRoutes[0] ?? null;
-  }
+async deleteRouteById(id, userId) {
+  return prisma.routeHistory.deleteMany({
+    where: {
+      id,
+      userId,
+    },
+  });
+}
 
-  async findRouteById(id, userId) {
-    return prisma.routeHistory.findFirst({
-      where: {
-        id,
-        userId,
-      },
-    });
-  }
-
-  async deleteRouteById(id, userId) {
-    return prisma.routeHistory.deleteMany({
-      where: {
-        id,
-        userId,
-      },
-    });
-  }
 }

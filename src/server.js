@@ -10,6 +10,10 @@ import {
   startIncidentWorker,
   stopIncidentWorker,
 } from '#modules/incidents/jobs/incident.worker.js';
+import {
+  startAlertsWorker,
+  stopAlertsWorker,
+} from '#modules/alerts/jobs/alerts.worker.js';
 
 const PORT = env.PORT;
 
@@ -19,10 +23,13 @@ const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
   logger.debug('This is a test debug log to verify logging functionality');
   logger.http('This is a test http log to verify logging functionality');
+
   startReportWorker();
   startCheckpointWorker();
   startIncidentWorker();
+  startAlertsWorker();
 });
+
 const shutdown = async (signal) => {
   logger.info(`${signal} received — starting graceful shutdown`);
 
@@ -30,6 +37,7 @@ const shutdown = async (signal) => {
     await stopReportWorker();
     await stopCheckpointWorker();
     await stopIncidentWorker();
+    await stopAlertsWorker();
     logger.info('Shutdown complete');
     process.exit(0);
   });
