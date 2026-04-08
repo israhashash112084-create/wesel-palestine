@@ -120,7 +120,7 @@ export class CheckpointsRepository {
     const lockKeys = this._buildLocationLockKeys(latitude, longitude);
 
     for (const [key1, key2] of lockKeys) {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${key1}, ${key2})`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${key1}::int, ${key2}::int)`;
     }
   }
 

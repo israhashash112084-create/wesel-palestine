@@ -259,63 +259,90 @@ export class ReportsService {
     return current;
   }
 
-  async _approveReport(report, moderatorId, reason) {
-    const rootReport = await this._getRootReport(report);
+ async _approveReport(report, moderatorId, reason) {
+  const rootReport = await this._getRootReport(report);
 
-    const applied = await this._applyDecision(
-      rootReport.id,
-      { status: REPORT_STATUSES.VERIFIED, extraFields: { rejectReason: null } },
-      moderatorId,
-      MODERATION_ACTIONS.APPROVED,
-      reason
+  const applied = await this._applyDecision(
+    rootReport.id,
+    { status: REPORT_STATUSES.VERIFIED, extraFields: { rejectReason: null } },
+    moderatorId,
+    MODERATION_ACTIONS.APPROVED,
+    reason
+  );
+
+  if (!applied) return false;
+
+  if (rootReport.incidentId) {
+    const actor = moderatorId ? { id: moderatorId } : systemUser();
+    await this.incidentsService.verifyIncident(
+      rootReport.incidentId,
+      actor,
+      reason ?? 'Verified via report'
     );
-
-    if (!applied) return false;
-
-    if (rootReport.incidentId) {
-      const actor = moderatorId ? { id: moderatorId } : systemUser();
-      await this.incidentsService.verifyIncident(
-        rootReport.incidentId,
-        actor,
-        reason ?? 'Verified via report'
-      );
-    }
-
-    await this._applyCheckpointStatusFromReport(
-      rootReport,
-      moderatorId ?? systemUser().id,
-      reason ?? 'Status verified via report moderation'
-    );
-
-    await scheduleScoreAdjustment(rootReport.id, 'increase');
-    await scheduleCacheInvalidation(rootReport.id);
-
-    return true;
   }
 
+  await this._applyCheckpointStatusFromReport(
+    rootReport,
+    moderatorId ?? systemUser().id,
+    reason ?? 'Status verified via report moderation'
+  );
+
+  if (this.alertsService) {
+    console.log('calling createReportStatusNotifications with:', {
+      ...rootReport,
+      status: 'verified',
+    });
+
+    await this.alertsService.createReportStatusNotifications({
+      ...rootReport,
+      status: 'verified',
+    });
+
+    console.log('report notifications creation finished');
+  }
+
+  await scheduleScoreAdjustment(rootReport.id, 'increase');
+  await scheduleCacheInvalidation(rootReport.id);
+
+  return true;
+}
   async _rejectReport(report, moderatorId, reason) {
-    const rootReport = await this._getRootReport(report);
+  const rootReport = await this._getRootReport(report);
 
-    const applied = await this._applyDecision(
-      rootReport.id,
-      { status: REPORT_STATUSES.REJECTED, extraFields: { rejectReason: reason } },
-      moderatorId,
-      MODERATION_ACTIONS.REJECTED,
-      reason
-    );
+  const applied = await this._applyDecision(
+    rootReport.id,
+    { status: REPORT_STATUSES.REJECTED, extraFields: { rejectReason: reason } },
+    moderatorId,
+    MODERATION_ACTIONS.REJECTED,
+    reason
+  );
 
-    if (!applied) return false;
+  if (!applied) return false;
 
-    if (rootReport.incidentId) {
-      const actor = moderatorId ? { id: moderatorId } : systemUser();
-      await this.incidentsService.rejectIncident(rootReport.incidentId, actor);
-    }
-
-    await scheduleScoreAdjustment(rootReport.id, 'decrease');
-    await scheduleCacheInvalidation(rootReport.id);
-
-    return true;
+  if (rootReport.incidentId) {
+    const actor = moderatorId ? { id: moderatorId } : systemUser();
+    await this.incidentsService.rejectIncident(rootReport.incidentId, actor);
   }
+
+  if (this.alertsService) {
+    console.log('calling createReportStatusNotifications with:', {
+      ...rootReport,
+      status: 'rejected',
+    });
+
+    await this.alertsService.createReportStatusNotifications({
+      ...rootReport,
+      status: 'rejected',
+    });
+
+    console.log('report notifications creation finished (REJECT)');
+  }
+
+  await scheduleScoreAdjustment(rootReport.id, 'decrease');
+  await scheduleCacheInvalidation(rootReport.id);
+
+  return true;
+}
 
   async _checkAutoDecision(report) {
     const { upCount, total } = await this.repo.getVoteCounts(report.id);
@@ -819,62 +846,42 @@ export class ReportsService {
   // ─── Moderate ──────────────────────────────────────────────────────────────
 
   async moderateReport(reportId, body, moderatorId) {
-    const report = await this._findReportOrThrow(reportId);
+  const report = await this._findReportOrThrow(reportId);
 
-    if (report.duplicateOf !== null) {
-      throw new BadRequestError(
-        `This is a duplicate. Moderate the original report (#${report.duplicateOf})`
-      );
-    }
+  if (report.duplicateOf !== null) {
+    throw new BadRequestError(
+      `This is a duplicate. Moderate the original report (#${report.duplicateOf})`
+    );
+  }
 
-    if (report.status === REPORT_STATUSES.VERIFIED) {
-      throw new BadRequestError('Report is already verified');
-    }
+  if (report.status === REPORT_STATUSES.VERIFIED) {
+    throw new BadRequestError('Report is already verified');
+  }
 
-    if (report.status === REPORT_STATUSES.REJECTED && body.action === 'reject') {
-      throw new BadRequestError('Report is already rejected');
-    }
+  if (report.status === REPORT_STATUSES.REJECTED && body.action === 'reject') {
+    throw new BadRequestError('Report is already rejected');
+  }
 
-    if (body.action === 'approve') {
-      const approved = await this._approveReport(report, moderatorId, body.reason ?? null);
+  if (body.action === 'approve') {
+    const approved = await this._approveReport(
+      report,
+      moderatorId,
+      body.reason ?? null
+    );
 
-      if (!approved) {
-        
-          await this.alertsService.createReportStatusNotifications({
-    ...report,
-    status: 'rejected',
-  });
-
-  console.log('report notifications creation finished (REJECT)');
-
-        
-        throw new BadRequestError('Report is no longer pending');
-      }
-
-      
-          if (this.alertsService) {
-  console.log('calling createReportStatusNotifications with:', {
-    ...report,
-    status: 'verified',
-  });
-
-  await this.alertsService.createReportStatusNotifications({
-    ...report,
-    status: 'verified',
-  });
-
-  console.log('report notifications creation finished');
-}
-      
-      return { message: 'Report approved and incident verified' };
-    }
-
-    const rejected = await this._rejectReport(report, moderatorId, body.reason);
-
-    if (!rejected) {
+    if (!approved) {
       throw new BadRequestError('Report is no longer pending');
     }
 
-    return { message: 'Report rejected' };
+    return { message: 'Report approved and incident verified' };
   }
+
+  const rejected = await this._rejectReport(report, moderatorId, body.reason);
+
+  if (!rejected) {
+    throw new BadRequestError('Report is no longer pending');
+  }
+
+  return { message: 'Report rejected' };
+}
 }

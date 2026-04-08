@@ -7,12 +7,12 @@ export class RouteCacheRepository {
     const conditions = [];
 
     if (typeof checkpointId === 'number') {
-      conditions.push({
-        checkpointsIds: {
-          has: checkpointId,
-        },
-      });
-    }
+  conditions.push({
+    checkpointsIds: {
+      has: checkpointId,
+    },
+  });
+}
 
     if (normalizedArea) {
       conditions.push({
