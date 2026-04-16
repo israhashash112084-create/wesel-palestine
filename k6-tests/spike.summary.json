@@ -1,0 +1,47 @@
+{
+  "scenario": "spike",
+  "generatedAt": "2026-04-16T12:09:49.535Z",
+  "overall": {
+    "avgResponseTime": 312.3881969196924,
+    "p95Latency": 1902.6466299999993,
+    "throughput": 39.26891278031751,
+    "totalErrorRate": 0.03850385038503851
+  },
+  "classification": {
+    "successRate": 0.9614678899082569,
+    "throttledRate": 0,
+    "businessRejectRate": 0.03853211009174312,
+    "serverErrorRate": 0,
+    "transportFailureRate": 0
+  },
+  "operations": [
+    {
+      "operation": "Auth login",
+      "requests": 48,
+      "throughput": 0.6912019851321013,
+      "avg": 82.56322083333332,
+      "p95": 88.414845
+    },
+    {
+      "operation": "Incidents list",
+      "requests": 1296,
+      "throughput": 18.662453598566735,
+      "avg": 117.72935640432091,
+      "p95": 424.78145
+    },
+    {
+      "operation": "Checkpoints list",
+      "requests": 821,
+      "throughput": 11.822433954030316,
+      "avg": 53.0360265529842,
+      "p95": 164.9635
+    },
+    {
+      "operation": "Report submit",
+      "requests": 560,
+      "throughput": 8.064023159874516,
+      "avg": 1163.7760458928587,
+      "p95": 2261.03178
+    }
+  ]
+}

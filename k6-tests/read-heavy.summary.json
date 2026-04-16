@@ -1,0 +1,61 @@
+{
+  "scenario": "read-heavy",
+  "generatedAt": "2026-04-16T11:53:58.687Z",
+  "overall": {
+    "avgResponseTime": 22.725010849719155,
+    "p95Latency": 78.89374000000002,
+    "throughput": 16.53654732278786,
+    "totalErrorRate": 0.00035112359550561797
+  },
+  "classification": {
+    "successRate": 0.999648629655657,
+    "throttledRate": 0.00035137034434293746,
+    "businessRejectRate": 0,
+    "serverErrorRate": 0,
+    "transportFailureRate": 0
+  },
+  "operations": [
+    {
+      "operation": "Auth login",
+      "requests": 24,
+      "throughput": 0.1393529268774258,
+      "avg": 84.49005833333334,
+      "p95": 104.87495499999999
+    },
+    {
+      "operation": "Incidents list",
+      "requests": 992,
+      "throughput": 5.759920977600266,
+      "avg": 11.602301310483874,
+      "p95": 33.412129999999955
+    },
+    {
+      "operation": "Checkpoints list",
+      "requests": 701,
+      "throughput": 4.070266739211478,
+      "avg": 15.713278887303872,
+      "p95": 66.7724
+    },
+    {
+      "operation": "Incidents nearby",
+      "requests": 521,
+      "throughput": 3.0251197876307847,
+      "avg": 22.02729558541268,
+      "p95": 45.1025
+    },
+    {
+      "operation": "Checkpoints nearby",
+      "requests": 344,
+      "throughput": 1.9973919519097696,
+      "avg": 18.966656104651165,
+      "p95": 68.25390499999997
+    },
+    {
+      "operation": "Route estimate",
+      "requests": 264,
+      "throughput": 1.5328821956516836,
+      "avg": 83.59565416666669,
+      "p95": 400.1633649999998
+    }
+  ]
+}

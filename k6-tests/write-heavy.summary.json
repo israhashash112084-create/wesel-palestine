@@ -1,0 +1,33 @@
+{
+  "scenario": "write-heavy",
+  "generatedAt": "2026-04-16T12:05:06.592Z",
+  "overall": {
+    "avgResponseTime": 1142.024495697329,
+    "p95Latency": 2122.461355,
+    "throughput": 3.8214514835127815,
+    "totalErrorRate": 0.08902077151335312
+  },
+  "classification": {
+    "successRate": 0.9107142857142857,
+    "throttledRate": 0,
+    "businessRejectRate": 0.08928571428571429,
+    "serverErrorRate": 0,
+    "transportFailureRate": 0
+  },
+  "operations": [
+    {
+      "operation": "Auth login",
+      "requests": 48,
+      "throughput": 0.2721508474905245,
+      "avg": 88.2960375,
+      "p95": 130.72042
+    },
+    {
+      "operation": "Report submit",
+      "requests": 624,
+      "throughput": 3.5379610173768183,
+      "avg": 1226.5341149038459,
+      "p95": 2128.856135
+    }
+  ]
+}

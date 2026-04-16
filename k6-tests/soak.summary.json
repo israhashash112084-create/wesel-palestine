@@ -1,0 +1,54 @@
+{
+  "scenario": "soak",
+  "generatedAt": "2026-04-16T12:49:28.281Z",
+  "overall": {
+    "avgResponseTime": 12.372020214356926,
+    "p95Latency": 24.372394999999994,
+    "throughput": 6.577984505022996,
+    "totalErrorRate": 0
+  },
+  "classification": {
+    "successRate": 1,
+    "throttledRate": 0,
+    "businessRejectRate": 0,
+    "serverErrorRate": 0,
+    "transportFailureRate": 0
+  },
+  "operations": [
+    {
+      "operation": "Auth login",
+      "requests": 48,
+      "throughput": 0.07869971491552936,
+      "avg": 78.98533541666667,
+      "p95": 93.854985
+    },
+    {
+      "operation": "Incidents list",
+      "requests": 1235,
+      "throughput": 2.0248780816808076,
+      "avg": 9.349157408906901,
+      "p95": 20.988609999999994
+    },
+    {
+      "operation": "Checkpoints list",
+      "requests": 1235,
+      "throughput": 2.0248780816808076,
+      "avg": 6.284999514170041,
+      "p95": 12.87993
+    },
+    {
+      "operation": "Route estimate",
+      "requests": 257,
+      "throughput": 0.4213713902768968,
+      "avg": 75.23653307393002,
+      "p95": 637.48834
+    },
+    {
+      "operation": "My alerts",
+      "requests": 1235,
+      "throughput": 2.0248780816808076,
+      "avg": 5.751362834008106,
+      "p95": 8.332109999999997
+    }
+  ]
+}
