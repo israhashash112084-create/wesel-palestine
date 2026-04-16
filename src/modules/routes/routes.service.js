@@ -1,5 +1,6 @@
+/* eslint-disable camelcase */
 import crypto from 'crypto';
-import { getOsrmRoutes, getOsrmRouteViaWaypoint} from '#integrations/routing/osrm.client.js';
+import { getOsrmRoutes, getOsrmRouteViaWaypoint } from '#integrations/routing/osrm.client.js';
 import { getWeather } from '#integrations/weather/weather.client.js';
 import { API_SERVICES, TRAFFIC_STATUSES, INCIDENT_SEVERITIES } from '#shared/constants/enums.js';
 import { BadRequestError } from '#shared/utils/errors.js';
@@ -29,9 +30,8 @@ const AVERAGE_SPEED_KMH = 60;
 
 const _normalizeArea = (value) => (value ?? '').trim().toLowerCase();
 
-const _isAreaAvoided = (area, avoidAreas=[]) =>
+const _isAreaAvoided = (area, avoidAreas = []) =>
   avoidAreas.map(_normalizeArea).includes(_normalizeArea(area));
-
 
 const _resolveAreaBoxes = (avoidAreas = []) => {
   return avoidAreas
@@ -52,7 +52,10 @@ const _buildCacheKey = (from, to, avoidCheckpoints, avoidAreas) => {
     `${from.lat},${from.lng}`,
     `${to.lat},${to.lng}`,
     [...avoidCheckpoints].sort((a, b) => a - b).join(','),
-    [...avoidAreas].map((a) => a.trim().toLowerCase()).sort().join(','),
+    [...avoidAreas]
+      .map((a) => a.trim().toLowerCase())
+      .sort()
+      .join(','),
   ].join('|');
 
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 64);
@@ -121,7 +124,7 @@ const _findDetourRouteForArea = async (from, to, areaBoxes) => {
   const candidates = [];
 
   for (const { name, box } of areaBoxes) {
-    const offsets = [ 0.1, 0.15, 0.2, 0.3];//
+    const offsets = [0.1, 0.15, 0.2, 0.3]; //
 
     for (const offset of offsets) {
       const waypoints = [
@@ -165,17 +168,10 @@ const _findDetourRouteForArea = async (from, to, areaBoxes) => {
 
 const _isRouteValid = (geometry, checkpointsToAvoid = [], areaBoxes = []) => {
   const passesCheckpoint = checkpointsToAvoid.some((cp) =>
-    routePassesNearPoint(
-      geometry,
-      Number(cp.latitude),
-      Number(cp.longitude),
-      1.5
-    )
+    routePassesNearPoint(geometry, Number(cp.latitude), Number(cp.longitude), 1.5)
   );
 
-  const passesArea = areaBoxes.some(({ box }) =>
-    routePassesThroughArea(geometry, box)
-  );
+  const passesArea = areaBoxes.some(({ box }) => routePassesThroughArea(geometry, box));
 
   return {
     isValid: !passesCheckpoint && !passesArea,
@@ -185,15 +181,18 @@ const _isRouteValid = (geometry, checkpointsToAvoid = [], areaBoxes = []) => {
 };
 
 export class RoutesService {
-
   constructor(routesRepository, deps) {
     this.routesRepository = routesRepository;
     this.checkpointsService = deps.checkpointsService;
     this.incidentsService = deps.incidentsService;
   }
 
-  async estimateRoute({ from, to, avoid_checkpoints ,avoid_areas, include_geometry }, userId, options={}) {
-    const {saveHistory = true }=options;
+  async estimateRoute(
+    { from, to, avoid_checkpoints, avoid_areas, include_geometry },
+    userId,
+    options = {}
+  ) {
+    const { saveHistory = true } = options;
 
     if (from.lat === to.lat && from.lng === to.lng) {
       throw new BadRequestError('Origin and destination cannot be the same');
@@ -206,7 +205,7 @@ export class RoutesService {
       //return { ...cached.responseData, fromCache: true };
       const formattedResponse = _formatRouteResponse(cached.responseData, true);
 
-      if(saveHistory){
+      if (saveHistory) {
         await this.routesRepository.saveRouteHistory({
           userId,
 
@@ -221,11 +220,11 @@ export class RoutesService {
           totalDelayMinutes: formattedResponse.summary.totalDelayMinutes,
 
           isFallback: formattedResponse.summary.isFallback,
-       });
-    }
+        });
+      }
 
       return formattedResponse;
-     //  return _formatRouteResponse(cached.responseData, true);
+      //  return _formatRouteResponse(cached.responseData, true);
     }
 
     /*const [allCheckpoints, allIncidents] = await Promise.all([
@@ -237,195 +236,190 @@ export class RoutesService {
       this.checkpointsService.getAllCheckpointsForRouting(),
       this.checkpointsService.getActiveCheckpoints(),
       this.incidentsService.getActiveIncidents(),
-   ]);
+    ]);
 
     let distanceKm, durationMinutes, geometry, isFallback;
     isFallback = false;
     let avoidanceWarning = null;
     let selectedGeometry = null;
 
+    const areaBoxes = _resolveAreaBoxes(avoid_areas);
 
-const areaBoxes = _resolveAreaBoxes(avoid_areas);
+    for (const { name, box } of areaBoxes) {
+      const fromInside =
+        from.lat >= box.minLat &&
+        from.lat <= box.maxLat &&
+        from.lng >= box.minLng &&
+        from.lng <= box.maxLng;
 
-  for (const { name, box } of areaBoxes) {
-  const fromInside =
-    from.lat >= box.minLat &&
-    from.lat <= box.maxLat &&
-    from.lng >= box.minLng &&
-    from.lng <= box.maxLng;
+      const toInside =
+        to.lat >= box.minLat &&
+        to.lat <= box.maxLat &&
+        to.lng >= box.minLng &&
+        to.lng <= box.maxLng;
 
-  const toInside =
-    to.lat >= box.minLat &&
-    to.lat <= box.maxLat &&
-    to.lng >= box.minLng &&
-    to.lng <= box.maxLng;
-
-  if (fromInside || toInside) {
-    throw new BadRequestError(
-      `Origin or destination is inside avoided area: ${name}`
-    );
-  }
-}
-
-try {
-  const osrm = await getOsrmRoutes(from, to);
-  console.log('OSRM route count:', osrm.routes.length);
-
-  const checkpointsToAvoid = allCheckpointsForRouting.filter((cp) =>
-    avoid_checkpoints.includes(cp.id)
-  );
-
-  const validRoutes = osrm.routes.filter((route, index) => {
-  const matchedCheckpoints = checkpointsToAvoid.filter((cp) =>
-    routePassesNearPoint(route.geometry, Number(cp.latitude), Number(cp.longitude), 1.5)
-  );
-
-  const matchedAreas = areaBoxes.filter(({ box }) =>
-    routePassesThroughArea(route.geometry, box)
-  );
-
-  console.log(`Route ${index + 1}: distance=${route.distanceKm} km, duration=${route.durationMinutes} min`);
-
-  if (matchedCheckpoints.length > 0) {
-    console.log(`Route ${index + 1} passes avoided checkpoints:`,
-      matchedCheckpoints.map((cp) => `${cp.id} - ${cp.name}`)
-    );
-  }
-  if (matchedAreas.length > 0) {
-    console.log(`Route ${index + 1} passes avoided areas:`,
-      matchedAreas.map((a) => a.name)
-    );
-  }
-  if (matchedCheckpoints.length === 0 && matchedAreas.length === 0) {
-    console.log(`Route ${index + 1} avoids all selected checkpoints and areas`);
-  }
-
-  return matchedCheckpoints.length === 0 && matchedAreas.length === 0;
-});
-
-
-  let selectedRoute =
-    validRoutes.length > 0
-      ? validRoutes.sort((a, b) => a.durationMinutes - b.durationMinutes)[0]
-      : null;
-
-  // Plan B
-if (!selectedRoute && checkpointsToAvoid.length > 0) {
-  console.log('trying Plan B1 (checkpoint detour)...');
-
-  const detourRoute = await _findDetourRoute(from, to, checkpointsToAvoid);
-
-  if (detourRoute) {
-    const validation = _isRouteValid(
-      detourRoute.geometry,
-      checkpointsToAvoid,
-      areaBoxes
-    );
-
-    console.log('checkpoint detour validation:', {
-      passesCheckpoint: validation.passesCheckpoint,
-      passesArea: validation.passesArea,
-      areaNames: areaBoxes.map((a) => a.name),
-    });
-
-    if (validation.isValid) {
-      selectedRoute = detourRoute;
-      avoidanceWarning = areaBoxes.length > 0
-        ? 'Using detour route to avoid selected checkpoint and area'
-        : 'Using detour route to avoid selected checkpoint';
-    } else {
-      if (validation.passesArea) {
-        console.log('checkpoint detour route still passes avoided area');
-      }
-      if (validation.passesCheckpoint) {
-        console.log('checkpoint detour route still passes avoided checkpoint');
+      if (fromInside || toInside) {
+        throw new BadRequestError(`Origin or destination is inside avoided area: ${name}`);
       }
     }
-  } else {
-    console.log('checkpoint detour route not found');
-  }
-}
-if (!selectedRoute && areaBoxes.length > 0) {
-  console.log('trying Plan B2 (area detour)...');
 
-  const areaDetourRoute = await _findDetourRouteForArea(from, to, areaBoxes);
+    try {
+      const osrm = await getOsrmRoutes(from, to);
+      console.log('OSRM route count:', osrm.routes.length);
 
-  if (areaDetourRoute) {
-    const validation = _isRouteValid(
-      areaDetourRoute.geometry,
-      checkpointsToAvoid,
-      areaBoxes
-    );
+      const checkpointsToAvoid = allCheckpointsForRouting.filter((cp) =>
+        avoid_checkpoints.includes(cp.id)
+      );
 
-    console.log('area detour validation:', {
-      passesCheckpoint: validation.passesCheckpoint,
-      passesArea: validation.passesArea,
-      areaNames: areaBoxes.map((a) => a.name),
-    });
+      const validRoutes = osrm.routes.filter((route, index) => {
+        const matchedCheckpoints = checkpointsToAvoid.filter((cp) =>
+          routePassesNearPoint(route.geometry, Number(cp.latitude), Number(cp.longitude), 1.5)
+        );
 
-    if (validation.isValid) {
-      selectedRoute = areaDetourRoute;
-      avoidanceWarning = checkpointsToAvoid.length > 0
-        ? 'Using detour route to avoid selected checkpoint and area'
-        : 'Using detour route to avoid selected area';
-    } else {
-      if (validation.passesArea) {
-        console.log('area detour route still passes avoided area');
+        const matchedAreas = areaBoxes.filter(({ box }) =>
+          routePassesThroughArea(route.geometry, box)
+        );
+
+        console.log(
+          `Route ${index + 1}: distance=${route.distanceKm} km, duration=${route.durationMinutes} min`
+        );
+
+        if (matchedCheckpoints.length > 0) {
+          console.log(
+            `Route ${index + 1} passes avoided checkpoints:`,
+            matchedCheckpoints.map((cp) => `${cp.id} - ${cp.name}`)
+          );
+        }
+        if (matchedAreas.length > 0) {
+          console.log(
+            `Route ${index + 1} passes avoided areas:`,
+            matchedAreas.map((a) => a.name)
+          );
+        }
+        if (matchedCheckpoints.length === 0 && matchedAreas.length === 0) {
+          console.log(`Route ${index + 1} avoids all selected checkpoints and areas`);
+        }
+
+        return matchedCheckpoints.length === 0 && matchedAreas.length === 0;
+      });
+
+      let selectedRoute =
+        validRoutes.length > 0
+          ? validRoutes.sort((a, b) => a.durationMinutes - b.durationMinutes)[0]
+          : null;
+
+      // Plan B
+      if (!selectedRoute && checkpointsToAvoid.length > 0) {
+        console.log('trying Plan B1 (checkpoint detour)...');
+
+        const detourRoute = await _findDetourRoute(from, to, checkpointsToAvoid);
+
+        if (detourRoute) {
+          const validation = _isRouteValid(detourRoute.geometry, checkpointsToAvoid, areaBoxes);
+
+          console.log('checkpoint detour validation:', {
+            passesCheckpoint: validation.passesCheckpoint,
+            passesArea: validation.passesArea,
+            areaNames: areaBoxes.map((a) => a.name),
+          });
+
+          if (validation.isValid) {
+            selectedRoute = detourRoute;
+            avoidanceWarning =
+              areaBoxes.length > 0
+                ? 'Using detour route to avoid selected checkpoint and area'
+                : 'Using detour route to avoid selected checkpoint';
+          } else {
+            if (validation.passesArea) {
+              console.log('checkpoint detour route still passes avoided area');
+            }
+            if (validation.passesCheckpoint) {
+              console.log('checkpoint detour route still passes avoided checkpoint');
+            }
+          }
+        } else {
+          console.log('checkpoint detour route not found');
+        }
       }
-      if (validation.passesCheckpoint) {
-        console.log('area detour route still passes avoided checkpoint');
+      if (!selectedRoute && areaBoxes.length > 0) {
+        console.log('trying Plan B2 (area detour)...');
+
+        const areaDetourRoute = await _findDetourRouteForArea(from, to, areaBoxes);
+
+        if (areaDetourRoute) {
+          const validation = _isRouteValid(areaDetourRoute.geometry, checkpointsToAvoid, areaBoxes);
+
+          console.log('area detour validation:', {
+            passesCheckpoint: validation.passesCheckpoint,
+            passesArea: validation.passesArea,
+            areaNames: areaBoxes.map((a) => a.name),
+          });
+
+          if (validation.isValid) {
+            selectedRoute = areaDetourRoute;
+            avoidanceWarning =
+              checkpointsToAvoid.length > 0
+                ? 'Using detour route to avoid selected checkpoint and area'
+                : 'Using detour route to avoid selected area';
+          } else {
+            if (validation.passesArea) {
+              console.log('area detour route still passes avoided area');
+            }
+            if (validation.passesCheckpoint) {
+              console.log('area detour route still passes avoided checkpoint');
+            }
+          }
+        } else {
+          console.log('area detour route not found');
+        }
       }
+
+      // fallback
+      if (!selectedRoute) {
+        selectedRoute = osrm.routes[0];
+
+        if (avoid_checkpoints?.length > 0 || avoid_areas?.length > 0) {
+          if (osrm.routes.length === 1) {
+            avoidanceWarning =
+              'OSRM did not return alternative routes for selected checkpoint/area, and no detour route was found';
+          } else {
+            avoidanceWarning =
+              'No alternative or detour route found that fully avoids selected checkpoints/area';
+          }
+        }
+      }
+
+      distanceKm = selectedRoute.distanceKm;
+      durationMinutes = selectedRoute.durationMinutes;
+      geometry = selectedRoute.geometry;
+      selectedGeometry = selectedRoute.geometry;
+
+      console.log('Selected route geometry points count:', selectedGeometry?.coordinates?.length);
+
+      await this.routesRepository.logApiCall({
+        service: API_SERVICES.OSRM,
+        endpoint: `/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}`,
+        statusCode: 200,
+        responseTimeMs: osrm.responseTimeMs,
+        isFallback: false,
+      });
+    } catch (err) {
+      console.log('ERROR inside ORSM try block:', err.message);
+      distanceKm = haversine(from, to);
+      durationMinutes = parseFloat(((distanceKm / AVERAGE_SPEED_KMH) * 60).toFixed(2));
+      geometry = null;
+      isFallback = true;
+      selectedGeometry = null;
+
+      await this.routesRepository.logApiCall({
+        service: API_SERVICES.OSRM,
+        endpoint: `/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}`,
+        statusCode: null,
+        responseTimeMs: null,
+        isFallback: true,
+        errorMessage: 'OSRM unavailable — using Haversine fallback',
+      });
     }
-  } else {
-    console.log('area detour route not found');
-  }
-}
-
-  // fallback
-  if (!selectedRoute) {
-    selectedRoute = osrm.routes[0];
-
-    if (avoid_checkpoints?.length > 0 || (avoid_areas?.length>0)) {
-      if (osrm.routes.length === 1) {
-        avoidanceWarning = 'OSRM did not return alternative routes for selected checkpoint/area, and no detour route was found';
-      } else {
-        avoidanceWarning = 'No alternative or detour route found that fully avoids selected checkpoints/area';
-      }
-    }
-  }
-
-  distanceKm = selectedRoute.distanceKm;
-  durationMinutes = selectedRoute.durationMinutes;
-  geometry = selectedRoute.geometry;
-  selectedGeometry = selectedRoute.geometry;
-
-  console.log('Selected route geometry points count:', selectedGeometry?.coordinates?.length);
-
-  await this.routesRepository.logApiCall({
-    service: API_SERVICES.OSRM,
-    endpoint: `/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}`,
-    statusCode: 200,
-    responseTimeMs: osrm.responseTimeMs,
-    isFallback: false,
-  });
-
-} catch(err) {
-  console.log('ERROR inside ORSM try block:',err.message);
-  distanceKm = haversine(from, to);
-  durationMinutes = parseFloat(((distanceKm / AVERAGE_SPEED_KMH) * 60).toFixed(2));
-  geometry = null;
-  isFallback = true;
-  selectedGeometry = null;
-
-  await this.routesRepository.logApiCall({
-    service: API_SERVICES.OSRM,
-    endpoint: `/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}`,
-    statusCode: null,
-    responseTimeMs: null,
-    isFallback: true,
-    errorMessage: 'OSRM unavailable — using Haversine fallback',
-  });
-}
     /*const checkpointsOnRoute = allCheckpoints.filter((cp) => {
     if (!selectedGeometry) return false;
 
@@ -443,45 +437,39 @@ if (!selectedRoute && areaBoxes.length > 0) {
   return passes;
    });*/
 
-   const allCheckpointsOnRoute = allCheckpointsForRouting.filter((cp) => {
-  if (!selectedGeometry) return false;
+    const allCheckpointsOnRoute = allCheckpointsForRouting.filter((cp) => {
+      if (!selectedGeometry) return false;
 
-  const passes = routePassesNearPoint(
-    selectedGeometry,
-    Number(cp.latitude),
-    Number(cp.longitude),
-    1.5
-  );
+      const passes = routePassesNearPoint(
+        selectedGeometry,
+        Number(cp.latitude),
+        Number(cp.longitude),
+        1.5
+      );
 
-  if (passes) {
-    console.log('Checkpoint ON ROUTE:', cp.id, cp.name, 'status:', cp.status);
-  }
+      if (passes) {
+        console.log('Checkpoint ON ROUTE:', cp.id, cp.name, 'status:', cp.status);
+      }
 
-  return passes;
-});
+      return passes;
+    });
 
-const checkpointsOnRoute = activeCheckpoints.filter((cp) => {
-  if (!selectedGeometry) return false;
+    const checkpointsOnRoute = activeCheckpoints.filter((cp) => {
+      if (!selectedGeometry) return false;
 
-  return routePassesNearPoint(
-    selectedGeometry,
-    Number(cp.latitude),
-    Number(cp.longitude),
-    1.5
-  );
-});
+      return routePassesNearPoint(selectedGeometry, Number(cp.latitude), Number(cp.longitude), 1.5);
+    });
 
-  const incidentsOnRoute = allIncidents.filter((inc) => {
-     if (!selectedGeometry) return false;
+    const incidentsOnRoute = allIncidents.filter((inc) => {
+      if (!selectedGeometry) return false;
 
-     return routePassesNearPoint(
-      selectedGeometry,
-      Number(inc.locationLat),
-      Number(inc.locationLng),
-      2
-   );
-   });
-
+      return routePassesNearPoint(
+        selectedGeometry,
+        Number(inc.locationLat),
+        Number(inc.locationLng),
+        2
+      );
+    });
 
     let weather = null;
     const midpoint = {
@@ -499,7 +487,6 @@ const checkpointsOnRoute = activeCheckpoints.filter((cp) => {
         responseTimeMs: weather.responseTimeMs,
         isFallback: false,
       });
-
     } catch {
       await this.routesRepository.logApiCall({
         service: API_SERVICES.OPENWEATHERMAP,
@@ -517,8 +504,7 @@ const checkpointsOnRoute = activeCheckpoints.filter((cp) => {
 
     if (avoidanceWarning) warnings.push(avoidanceWarning);
 
-
-  /*for (const cp of checkpointsOnRoute) {
+    /*for (const cp of checkpointsOnRoute) {
     const isAvoidedCheckpoint = avoid_checkpoints.includes(cp.id);
     const isAvoidedArea       = _isAreaAvoided(cp.city, avoid_areas);
     const isAvoided           = isAvoidedCheckpoint || isAvoidedArea;
@@ -543,52 +529,52 @@ const checkpointsOnRoute = activeCheckpoints.filter((cp) => {
   }
 }*/
 
-for (const cp of checkpointsOnRoute) {
-  const requestedAvoidByCheckpoint = avoid_checkpoints.includes(cp.id);
-  const requestedAvoidByArea = _isAreaAvoided(cp.city, avoid_areas);
+    for (const cp of checkpointsOnRoute) {
+      const requestedAvoidByCheckpoint = avoid_checkpoints.includes(cp.id);
+      const requestedAvoidByArea = _isAreaAvoided(cp.city, avoid_areas);
 
-  const actuallyAvoided = false;
-  const delay = DELAY_CHECKPOINT[cp.status] ?? 0;
+      const actuallyAvoided = false;
+      const delay = DELAY_CHECKPOINT[cp.status] ?? 0;
 
-  totalDelayMinutes += delay;
+      totalDelayMinutes += delay;
 
-  factors.push({
-    type: 'checkpoint',
-    name: cp.name,
-    status: cp.status,
-    city: cp.city ?? null,
-    delayMinutes: delay,
-    avoided: actuallyAvoided,
-    avoidedBy: null,
-    requestedToAvoid: requestedAvoidByCheckpoint || requestedAvoidByArea,
-    requestedAvoidBy: requestedAvoidByCheckpoint
-      ? 'checkpoint'
-      : requestedAvoidByArea
-        ? 'area'
-        : null,
-  });
+      factors.push({
+        type: 'checkpoint',
+        name: cp.name,
+        status: cp.status,
+        city: cp.city ?? null,
+        delayMinutes: delay,
+        avoided: actuallyAvoided,
+        avoidedBy: null,
+        requestedToAvoid: requestedAvoidByCheckpoint || requestedAvoidByArea,
+        requestedAvoidBy: requestedAvoidByCheckpoint
+          ? 'checkpoint'
+          : requestedAvoidByArea
+            ? 'area'
+            : null,
+      });
 
-  if (cp.status === TRAFFIC_STATUSES.CLOSED) {
-    warnings.push(`Checkpoint "${cp.name}" is closed`);
-  }
-}
+      if (cp.status === TRAFFIC_STATUSES.CLOSED) {
+        warnings.push(`Checkpoint "${cp.name}" is closed`);
+      }
+    }
 
     for (const inc of incidentsOnRoute) {
-     const isAvoidedArea = _isAreaAvoided(inc.area, avoid_areas);
-     const delay = isAvoidedArea ? 0 : (DELAY_INCIDENT[inc.severity] ?? 0);
+      const isAvoidedArea = _isAreaAvoided(inc.area, avoid_areas);
+      const delay = isAvoidedArea ? 0 : (DELAY_INCIDENT[inc.severity] ?? 0);
 
-     totalDelayMinutes += delay;
+      totalDelayMinutes += delay;
 
-     factors.push({
-      type: 'incident',
-      incidentType: inc.type,
-      severity: inc.severity,
-      area: inc.area ?? null,
-      delayMinutes: delay,
-      avoided: isAvoidedArea,
-      avoidedBy: isAvoidedArea ? 'area' : null,
-  });
-}
+      factors.push({
+        type: 'incident',
+        incidentType: inc.type,
+        severity: inc.severity,
+        area: inc.area ?? null,
+        delayMinutes: delay,
+        avoided: isAvoidedArea,
+        avoidedBy: isAvoidedArea ? 'area' : null,
+      });
+    }
 
     if (weather?.isHazardous) {
       totalDelayMinutes += DELAY_WEATHER;
@@ -601,7 +587,9 @@ for (const cp of checkpointsOnRoute) {
       warnings.push(`Hazardous weather: ${weather.description}`);
     }
 
-    const hasIncidents = incidentsOnRoute.length > 0 || checkpointsOnRoute.some((cp) => cp.status === TRAFFIC_STATUSES.CLOSED);
+    const hasIncidents =
+      incidentsOnRoute.length > 0 ||
+      checkpointsOnRoute.some((cp) => cp.status === TRAFFIC_STATUSES.CLOSED);
 
     const ttl = hasIncidents ? CACHE_TTL_INCIDENT_MS : CACHE_TTL_CLEAR_MS;
     const expiresAt = new Date(Date.now() + ttl);
@@ -609,28 +597,28 @@ for (const cp of checkpointsOnRoute) {
     const finalDuration = parseFloat((durationMinutes + totalDelayMinutes).toFixed(2));
     const responseData = {
       summary: {
-       distanceKm,
-       baseDurationMinutes: parseFloat(durationMinutes.toFixed(2)),
-       totalDelayMinutes,
-       finalDurationMinutes: finalDuration,
-       isFallback,
-     },
+        distanceKm,
+        baseDurationMinutes: parseFloat(durationMinutes.toFixed(2)),
+        totalDelayMinutes,
+        finalDurationMinutes: finalDuration,
+        isFallback,
+      },
 
       route: {
         from,
         to,
         geometry: include_geometry ? geometry : {},
-     },
+      },
 
       conditions: {
         weather: weather
-        ? {
-          condition: weather.condition,
-          description: weather.description,
-        }
-        : null,
-       warnings,
-     },
+          ? {
+              condition: weather.condition,
+              description: weather.description,
+            }
+          : null,
+        warnings,
+      },
 
       impact: {
         counts: {
@@ -638,17 +626,17 @@ for (const cp of checkpointsOnRoute) {
           incidents: factors.filter((f) => f.type === 'incident').length,
           totalFactors: factors.length,
         },
-       factors,
-     },
-  };
+        factors,
+      },
+    };
 
-  //const checkpointsIds = checkpointsOnRoute.map((cp) => cp.id);
-  const checkpointsIds = allCheckpointsOnRoute.map((cp) => cp.id);
-  const areas = [
-  ...checkpointsOnRoute.map((cp) => _normalizeArea(cp.city)).filter(Boolean),
-  ...incidentsOnRoute.map((inc) => _normalizeArea(inc.area)).filter(Boolean),
-  ];
-  const uniqueAreas = [...new Set(areas)];
+    //const checkpointsIds = checkpointsOnRoute.map((cp) => cp.id);
+    const checkpointsIds = allCheckpointsOnRoute.map((cp) => cp.id);
+    const areas = [
+      ...checkpointsOnRoute.map((cp) => _normalizeArea(cp.city)).filter(Boolean),
+      ...incidentsOnRoute.map((inc) => _normalizeArea(inc.area)).filter(Boolean),
+    ];
+    const uniqueAreas = [...new Set(areas)];
 
     await this.routesRepository.saveCache({
       cacheKey,
@@ -662,269 +650,263 @@ for (const cp of checkpointsOnRoute) {
       areas: uniqueAreas,
     });
 
-  if(saveHistory){
-    await this.routesRepository.saveRouteHistory({
-      userId,
+    if (saveHistory) {
+      await this.routesRepository.saveRouteHistory({
+        userId,
 
-      fromLat: from.lat,
-      fromLng: from.lng,
-      toLat: to.lat,
-      toLng: to.lng,
+        fromLat: from.lat,
+        fromLng: from.lng,
+        toLat: to.lat,
+        toLng: to.lng,
 
-      distanceKm: responseData.summary.distanceKm,
-      baseDurationMinutes: responseData.summary.baseDurationMinutes,
-      finalDurationMinutes: responseData.summary.finalDurationMinutes,
-      totalDelayMinutes: responseData.summary.totalDelayMinutes,
+        distanceKm: responseData.summary.distanceKm,
+        baseDurationMinutes: responseData.summary.baseDurationMinutes,
+        finalDurationMinutes: responseData.summary.finalDurationMinutes,
+        totalDelayMinutes: responseData.summary.totalDelayMinutes,
 
-      isFallback: responseData.summary.isFallback,
-    });
+        isFallback: responseData.summary.isFallback,
+      });
+    }
 
-  }
-  
-   // return { ...responseData, fromCache: false };
-   return _formatRouteResponse(responseData, false);
+    // return { ...responseData, fromCache: false };
+    return _formatRouteResponse(responseData, false);
   }
 
   async getRouteHistory(query, userId) {
-   const { page, limit } = query;
+    const { page, limit } = query;
 
-   const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
+    const { skip, take, buildPaginationMeta } = getPaginationParams(page, limit);
 
-   const [routes, total] = await Promise.all([
-     this.routesRepository.findUserRouteHistory(userId, { skip, take }),
-     this.routesRepository.countUserRouteHistory(userId),
-  ]);
+    const [routes, total] = await Promise.all([
+      this.routesRepository.findUserRouteHistory(userId, { skip, take }),
+      this.routesRepository.countUserRouteHistory(userId),
+    ]);
 
-   const formattedRoutes = routes.map((route) => ({
-     id: route.id,
-     from: {
-      lat: Number(route.fromLat),
-      lng: Number(route.fromLng),
-    },
-     to: {
-      lat: Number(route.toLat),
-      lng: Number(route.toLng),
-    },
-     distanceKm: Number(route.distanceKm),
-     baseDurationMinutes: Number(route.baseDurationMinutes),
-     finalDurationMinutes: Number(route.finalDurationMinutes),
-     totalDelayMinutes: route.totalDelayMinutes,
-     isFallback: route.isFallback,
-     createdAt: route.createdAt,
-  }));
+    const formattedRoutes = routes.map((route) => ({
+      id: route.id,
+      from: {
+        lat: Number(route.fromLat),
+        lng: Number(route.fromLng),
+      },
+      to: {
+        lat: Number(route.toLat),
+        lng: Number(route.toLng),
+      },
+      distanceKm: Number(route.distanceKm),
+      baseDurationMinutes: Number(route.baseDurationMinutes),
+      finalDurationMinutes: Number(route.finalDurationMinutes),
+      totalDelayMinutes: route.totalDelayMinutes,
+      isFallback: route.isFallback,
+      createdAt: route.createdAt,
+    }));
 
-   return {
-    routes: formattedRoutes,
-    pagination: buildPaginationMeta(total),
+    return {
+      routes: formattedRoutes,
+      pagination: buildPaginationMeta(total),
     };
   }
 
-async compareRoutes({ from, to, scenarios }, userId) {
-  if (!scenarios || scenarios.length === 0) {
-    throw new BadRequestError('Scenarios are required');
-  }
-
-  const results = [];
-
-  for (const scenario of scenarios) {
-    const result = await this.estimateRoute(
-      {
-        from,
-        to,
-        avoid_checkpoints: scenario.avoid_checkpoints ?? [],
-        avoid_areas: scenario.avoid_areas ?? [],
-        include_geometry: false, 
-      },
-      userId,
-      {saveHistory:false}
-    );
-
-    results.push({
-      name: scenario.name ?? 'scenario',
-      avoid_checkpoints: scenario.avoid_checkpoints ?? [],
-      avoid_areas: scenario.avoid_areas ?? [],
-
-      distanceKm: result.summary.distanceKm,
-      baseDurationMinutes: result.summary.baseDurationMinutes,
-      totalDelayMinutes: result.summary.totalDelayMinutes,
-      finalDurationMinutes: result.summary.finalDurationMinutes,
-      isFallback: result.summary.isFallback,
-
-      warningCount: result.conditions?.warnings?.length ?? 0,
-      warnings: result.conditions?.warnings ?? [],
-
-      checkpointCount: result.impact?.counts?.checkpoints ?? 0,
-      incidentCount: result.impact?.counts?.incidents ?? 0,
-      totalFactors: result.impact?.counts?.totalFactors ?? 0,
-    });
-  }
-
-  const sortedResults = [...results].sort(
-    (a, b) => a.finalDurationMinutes - b.finalDurationMinutes
-  );
-
-  const best = sortedResults[0] ?? null;
-
-  return {
-    from,
-    to,
-    recommendedScenario: best
-      ? {
-          name: best.name,
-          finalDurationMinutes: best.finalDurationMinutes,
-          totalDelayMinutes: best.totalDelayMinutes,
-          warningCount: best.warningCount,
-        }
-      : null,
-
-    comparisons: sortedResults,
-  };
-}
-
-async getAreasStatus() {
-  const [checkpoints, incidents] = await Promise.all([
-    this.checkpointsService.getCheckpointsByArea(),
-    this.incidentsService.getIncidentsByArea(),
-  ]);
-
-  const areas = Object.keys(AREA_BOUNDARIES);
-  const result = {};
-
-  for (const area of areas) {
-    const areaCheckpoints = checkpoints.filter(
-      (cp) => _normalizeArea(cp.city) === area
-    );
-
-    const areaIncidents = incidents.filter(
-      (inc) => _normalizeArea(inc.area) === area
-    );
-
-    const closedCheckpoints = areaCheckpoints.filter(
-      (cp) => cp.status === TRAFFIC_STATUSES.CLOSED
-    ).length;
-
-    const criticalIncidents = areaIncidents.filter(
-      (inc) =>
-        inc.severity === INCIDENT_SEVERITIES.CRITICAL ||
-        inc.severity === INCIDENT_SEVERITIES.HIGH
-    ).length;
-
-    let status;
-    if (closedCheckpoints >= 2 || criticalIncidents >= 2) {
-      status = 'high_risk';
-    } else if (closedCheckpoints === 1 || criticalIncidents === 1) {
-       status = 'moderate_risk';
-    } else if (areaCheckpoints.length >= 1 || areaIncidents.length >= 1) {
-      status = 'low_risk';
-    } else {
-      status = 'clear';
+  async compareRoutes({ from, to, scenarios }, userId) {
+    if (!scenarios || scenarios.length === 0) {
+      throw new BadRequestError('Scenarios are required');
     }
 
-    result[area] = {
-      status,
-      checkpoints: areaCheckpoints.length,
-      closedCheckpoints,
-      incidents: areaIncidents.length,
-      criticalIncidents,
+    const results = [];
+
+    for (const scenario of scenarios) {
+      const result = await this.estimateRoute(
+        {
+          from,
+          to,
+          avoid_checkpoints: scenario.avoid_checkpoints ?? [],
+          avoid_areas: scenario.avoid_areas ?? [],
+          include_geometry: false,
+        },
+        userId,
+        { saveHistory: false }
+      );
+
+      results.push({
+        name: scenario.name ?? 'scenario',
+        avoid_checkpoints: scenario.avoid_checkpoints ?? [],
+        avoid_areas: scenario.avoid_areas ?? [],
+
+        distanceKm: result.summary.distanceKm,
+        baseDurationMinutes: result.summary.baseDurationMinutes,
+        totalDelayMinutes: result.summary.totalDelayMinutes,
+        finalDurationMinutes: result.summary.finalDurationMinutes,
+        isFallback: result.summary.isFallback,
+
+        warningCount: result.conditions?.warnings?.length ?? 0,
+        warnings: result.conditions?.warnings ?? [],
+
+        checkpointCount: result.impact?.counts?.checkpoints ?? 0,
+        incidentCount: result.impact?.counts?.incidents ?? 0,
+        totalFactors: result.impact?.counts?.totalFactors ?? 0,
+      });
+    }
+
+    const sortedResults = [...results].sort(
+      (a, b) => a.finalDurationMinutes - b.finalDurationMinutes
+    );
+
+    const best = sortedResults[0] ?? null;
+
+    return {
+      from,
+      to,
+      recommendedScenario: best
+        ? {
+            name: best.name,
+            finalDurationMinutes: best.finalDurationMinutes,
+            totalDelayMinutes: best.totalDelayMinutes,
+            warningCount: best.warningCount,
+          }
+        : null,
+
+      comparisons: sortedResults,
     };
   }
 
-  return result;
-}
+  async getAreasStatus() {
+    const [checkpoints, incidents] = await Promise.all([
+      this.checkpointsService.getCheckpointsByArea(),
+      this.incidentsService.getIncidentsByArea(),
+    ]);
 
-async getRouteHistoryStats(userId) {
-  const [stats, fallbackCount, mostVisitedRoute] = await Promise.all([
-    this.routesRepository.getUserRouteHistoryStats(userId),
-    this.routesRepository.countUserFallbackRoutes(userId),
-    this.routesRepository.findMostVisitedRoute(userId),
-  ]);
+    const areas = Object.keys(AREA_BOUNDARIES);
+    const result = {};
 
-  return {
-    totalRoutes: stats._count.id ?? 0,
-    totalDistanceKm: Number(stats._sum.distanceKm ?? 0),
-    averageDelayMinutes: Number(stats._avg.totalDelayMinutes ?? 0),
-    fallbackCount,
-    mostVisitedRoute: mostVisitedRoute
-      ? {
-          from: {
-            lat: Number(mostVisitedRoute.fromLat),
-            lng: Number(mostVisitedRoute.fromLng),
-          },
-          to: {
-            lat: Number(mostVisitedRoute.toLat),
-            lng: Number(mostVisitedRoute.toLng),
-          },
-          count: mostVisitedRoute._count.id,
-        }
-      : null,
-  };
-}
+    for (const area of areas) {
+      const areaCheckpoints = checkpoints.filter((cp) => _normalizeArea(cp.city) === area);
 
-async getActiveCheckpoints() {
-  const checkpoints = await this.checkpointsService.getActiveCheckpoints();
+      const areaIncidents = incidents.filter((inc) => _normalizeArea(inc.area) === area);
 
-  return checkpoints.map((cp) => ({
-    id: cp.id,
-    name: cp.name,
-    status: cp.status,
-    location: {
-      lat: Number(cp.latitude),
-      lng: Number(cp.longitude),
-    },
-    city: cp.city ?? null,
-  }));
-}
+      const closedCheckpoints = areaCheckpoints.filter(
+        (cp) => cp.status === TRAFFIC_STATUSES.CLOSED
+      ).length;
 
-async getActiveIncidents() {
-  const incidents = await this.incidentsService.getActiveIncidents();
+      const criticalIncidents = areaIncidents.filter(
+        (inc) =>
+          inc.severity === INCIDENT_SEVERITIES.CRITICAL || inc.severity === INCIDENT_SEVERITIES.HIGH
+      ).length;
 
-  return incidents.map((inc) => ({
-    id: inc.id,
-    type: inc.type,
-    severity: inc.severity,
-    location: {
-      lat: Number(inc.locationLat),
-      lng: Number(inc.locationLng),
-    },
-    area: inc.area ?? null,
-  }));
-}
+      let status;
+      if (closedCheckpoints >= 2 || criticalIncidents >= 2) {
+        status = 'high_risk';
+      } else if (closedCheckpoints === 1 || criticalIncidents === 1) {
+        status = 'moderate_risk';
+      } else if (areaCheckpoints.length >= 1 || areaIncidents.length >= 1) {
+        status = 'low_risk';
+      } else {
+        status = 'clear';
+      }
 
-async getRouteById(id, userId) {
-  const route = await this.routesRepository.findRouteById(Number(id), userId);
+      result[area] = {
+        status,
+        checkpoints: areaCheckpoints.length,
+        closedCheckpoints,
+        incidents: areaIncidents.length,
+        criticalIncidents,
+      };
+    }
 
-  if (!route) {
-    throw new BadRequestError('Route not found');
+    return result;
   }
 
-  return {
-    id: route.id,
-    from: {
-      lat: Number(route.fromLat),
-      lng: Number(route.fromLng),
-    },
-    to: {
-      lat: Number(route.toLat),
-      lng: Number(route.toLng),
-    },
-    distanceKm: Number(route.distanceKm),
-    baseDurationMinutes: Number(route.baseDurationMinutes),
-    finalDurationMinutes: Number(route.finalDurationMinutes),
-    totalDelayMinutes: route.totalDelayMinutes,
-    isFallback: route.isFallback,
-    createdAt: route.createdAt,
-  };
-}
+  async getRouteHistoryStats(userId) {
+    const [stats, fallbackCount, mostVisitedRoute] = await Promise.all([
+      this.routesRepository.getUserRouteHistoryStats(userId),
+      this.routesRepository.countUserFallbackRoutes(userId),
+      this.routesRepository.findMostVisitedRoute(userId),
+    ]);
 
-async deleteRouteById(id, userId) {
-  const deleted = await this.routesRepository.deleteRouteById(Number(id), userId);
-
-  if (deleted.count === 0) {
-    throw new BadRequestError('Route not found');
+    return {
+      totalRoutes: stats._count.id ?? 0,
+      totalDistanceKm: Number(stats._sum.distanceKm ?? 0),
+      averageDelayMinutes: Number(stats._avg.totalDelayMinutes ?? 0),
+      fallbackCount,
+      mostVisitedRoute: mostVisitedRoute
+        ? {
+            from: {
+              lat: Number(mostVisitedRoute.fromLat),
+              lng: Number(mostVisitedRoute.fromLng),
+            },
+            to: {
+              lat: Number(mostVisitedRoute.toLat),
+              lng: Number(mostVisitedRoute.toLng),
+            },
+            count: mostVisitedRoute._count.id,
+          }
+        : null,
+    };
   }
 
-  return {
-    message: 'Route deleted successfully',
-  };
-}
+  async getActiveCheckpoints() {
+    const checkpoints = await this.checkpointsService.getActiveCheckpoints();
+
+    return checkpoints.map((cp) => ({
+      id: cp.id,
+      name: cp.name,
+      status: cp.status,
+      location: {
+        lat: Number(cp.latitude),
+        lng: Number(cp.longitude),
+      },
+      city: cp.city ?? null,
+    }));
+  }
+
+  async getActiveIncidents() {
+    const incidents = await this.incidentsService.getActiveIncidents();
+
+    return incidents.map((inc) => ({
+      id: inc.id,
+      type: inc.type,
+      severity: inc.severity,
+      location: {
+        lat: Number(inc.locationLat),
+        lng: Number(inc.locationLng),
+      },
+      area: inc.area ?? null,
+    }));
+  }
+
+  async getRouteById(id, userId) {
+    const route = await this.routesRepository.findRouteById(Number(id), userId);
+
+    if (!route) {
+      throw new BadRequestError('Route not found');
+    }
+
+    return {
+      id: route.id,
+      from: {
+        lat: Number(route.fromLat),
+        lng: Number(route.fromLng),
+      },
+      to: {
+        lat: Number(route.toLat),
+        lng: Number(route.toLng),
+      },
+      distanceKm: Number(route.distanceKm),
+      baseDurationMinutes: Number(route.baseDurationMinutes),
+      finalDurationMinutes: Number(route.finalDurationMinutes),
+      totalDelayMinutes: route.totalDelayMinutes,
+      isFallback: route.isFallback,
+      createdAt: route.createdAt,
+    };
+  }
+
+  async deleteRouteById(id, userId) {
+    const deleted = await this.routesRepository.deleteRouteById(Number(id), userId);
+
+    if (deleted.count === 0) {
+      throw new BadRequestError('Route not found');
+    }
+
+    return {
+      message: 'Route deleted successfully',
+    };
+  }
 }

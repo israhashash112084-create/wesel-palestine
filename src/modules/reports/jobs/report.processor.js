@@ -28,10 +28,37 @@ export const reportProcessor = async (job) => {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const _loadService = async () => {
+  const { AlertsRepository } = await import('#modules/alerts/alerts.repository.js');
+  const { AlertsService } = await import('#modules/alerts/alerts.service.js');
+  const { CheckpointsRepository } = await import('#modules/checkpoints/checkpoints.repository.js');
+  const { CheckpointsService } = await import('#modules/checkpoints/checkpoints.service.js');
+  const { RouteCacheRepository } = await import('#modules/routes/route-cache.repository.js');
+  const { RouteCacheService } = await import('#modules/routes/route-cache.service.js');
+  const { IncidentsRepository } = await import('#modules/incidents/incidents.repository.js');
+  const { IncidentsService } = await import('#modules/incidents/incidents.service.js');
   const { ReportsRepository } = await import('#modules/reports/reports.repository.js');
   const { ReportsService } = await import('#modules/reports/reports.service.js');
+
+  const alertsRepository = new AlertsRepository();
+  const alertsService = new AlertsService(alertsRepository);
+
+  const routeCacheRepository = new RouteCacheRepository();
+  const routeCacheService = new RouteCacheService(routeCacheRepository);
+
+  const checkpointsRepository = new CheckpointsRepository();
+  const checkpointsService = new CheckpointsService(checkpointsRepository, { routeCacheService });
+
+  const incidentsRepository = new IncidentsRepository();
+  const incidentsService = new IncidentsService(incidentsRepository, alertsService);
+
   const repo = new ReportsRepository();
-  const service = new ReportsService(repo);
+  const service = new ReportsService(repo, {
+    incidentsService,
+    checkpointsService,
+    alertsService,
+  });
+
+  incidentsService.setReportsService(service);
   return { repo, service };
 };
 
