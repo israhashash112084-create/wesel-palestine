@@ -1031,8 +1031,8 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 - `POST /alerts/subscriptions` — Create alert subscription
 - `GET /alerts/subscriptions` — Get user's subscriptions
 - `PATCH /alerts/subscriptions/:id` — Update subscription
-- `DELETE /alerts/subscriptions/:id` — Deactivate subscription
-- `GET /alerts/my-alerts` — Get user's alerts
+- `PATCH /alerts/subscriptions/:id/deactivate` — Deactivate subscription
+- `GET /alerts/alerts` — Get user's alerts
 - `PATCH /alerts/:id/read` — Mark alert as read
 
 **Alert Matching Logic**:
