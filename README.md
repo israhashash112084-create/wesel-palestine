@@ -581,7 +581,7 @@ Each endpoint tested with valid data to confirm correct responses:
 6. POST /reports/:id/moderate → Moderate report (moderator)
 7. POST /routes/estimate      → Estimate route
 8. POST /alerts/subscriptions → Create alert subscription
-9. GET /alerts/my-alerts      → Get my alerts
+9. GET /alerts/alerts         → Get my alerts
 ```
 
 ### Code Quality Tools
