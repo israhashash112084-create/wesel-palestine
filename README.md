@@ -206,73 +206,6 @@ Upvotes   Upvotes
   <img src="./prisma-erd.svg" alt="Wesel Palestine ERD" width="100%">
 </p>
 
-```
-┌──────────────────┐         ┌──────────────────┐
-│      users       │         │   checkpoints    │
-├──────────────────┤         ├──────────────────┤
-│ id (UUID) PK     │────┐    │ id (INT) PK      │
-│ email            │    │    │ name             │
-│ password_hash    │    │    │ area, road, city │
-│ first_name       │    │    │ latitude, long.  │
-│ last_name        │    │    │ status           │
-│ role             │    │    │ created_by (FK)──┼──► users
-│ confidence_score │    │    │ created_at       │
-│ created_at       │    │    └──────────────────┘
-└──────────────────┘    │           │
-                        │           │ 1:N
-                        │           ▼
-                        │    ┌──────────────────┐
-                        │    │    incidents     │
-                        │    ├──────────────────┤
-                        ├───►│ id (INT) PK      │
-                        │    │ checkpoint_id FK ─┼──► checkpoints
-                        │    │ reported_by FK ───┼──► users
-                        │    │ moderated_by FK ──┼──► users
-                        │    │ location_lat/lng  │
-                        │    │ type, severity    │
-                        │    │ status            │
-                        │    │ traffic_status    │
-                        │    └──────────────────┘
-                        │           │ 1:N
-                        │           ▼
-                        │    ┌──────────────────┐
-                        │    │     reports      │
-                        │    ├──────────────────┤
-                        ├───►│ id (INT) PK      │
-                        │    │ user_id FK ───────┼──► users
-                        │    │ incident_id FK ───┼──► incidents
-                        │    │ checkpoint_id FK ─┼──► checkpoints
-                        │    │ duplicate_of FK ──┼──► reports (self-ref)
-                        │    │ location_lat/lng  │
-                        │    │ type, severity    │
-                        │    │ status            │
-                        │    │ confidence_score  │
-                        │    └──────────────────┘
-                        │
-                        │    ┌──────────────────────┐
-                        │    │  alert_subscriptions │
-                        │    ├──────────────────────┤
-                        ├───►│ id (INT) PK          │
-                        │    │ user_id FK ───────────┼──► users
-                        │    │ area_lat/lng          │
-                        │    │ radius_km             │
-                        │    │ category              │
-                        │    │ is_active             │
-                        │    └──────────────────────┘
-                        │
-                        │    ┌──────────────────────┐
-                        │    │  route_history       │
-                        │    ├──────────────────────┤
-                        └───►│ id (INT) PK          │
-                             │ user_id FK ───────────┼──► users
-                             │ from_lat/lng          │
-                             │ to_lat/lng            │
-                             │ distance_km           │
-                             │ duration_minutes      │
-                             │ total_delay           │
-                             │ is_fallback           │
-                             └──────────────────────┘
-```
 
 ### Supporting Tables
 
@@ -363,25 +296,18 @@ https://api.weselpalestine.com/api/v1/{resource}
 ### Route Estimation Algorithm
 
 ```
-1. Query OSRM for optimal route
-2. Check if route passes near checkpoints (1.5km radius)
-3. If checkpoint on route → Try detour via waypoints (Plan B)
-4. If no valid detour → Use best route with warning
-5. If OSRM fails → Haversine straight-line fallback
-6. Apply delay penalties:
- Checkpoint delay:
-      - closed: +20 minutes
-      - slow: +10 minutes
- Incident delay:
-      - low: +5 minutes
-      - medium: +10 minutes
-      - high: +20 minutes
-      - critical: +30 minutes
- Weather delay:
-      - hazardous conditions: +10 minutes
-7. Cache result:
-   • 10 min if incidents present
-   • 60 min if route is clear
+Route Estimation Flow
+1. Query OSRM for one or more candidate routes
+2. Validate route alternatives against selected checkpoint and area avoidance filters
+3. If a route still passes avoided checkpoints or areas, attempt waypoint-based detour logic (Plan B)
+4. If no valid detour is found, return the best available route with warning messages
+5. If OSRM fails, use Haversine fallback estimation
+6. Detect checkpoints and incidents near the route geometry
+7. Apply delay penalties for checkpoints, incidents, and weather
+8. Cache the result:
+   • 10 minutes if affected by incidents
+   • 60 minutes if route is clear
+9. Track checkpoint dependencies for cache invalidation
 ```
 
 ### Caching Strategy
