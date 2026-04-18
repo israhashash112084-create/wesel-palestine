@@ -1,54 +1,55 @@
 {
   "scenario": "mixed",
-  "generatedAt": "2026-04-16T12:08:24.572Z",
+  "generatedAt": "2026-04-17T16:37:09.014Z",
   "overall": {
-    "avgResponseTime": 196.17248123501176,
-    "p95Latency": 1692.3266899999976,
-    "throughput": 9.524140959999562,
-    "totalErrorRate": 0.026378896882494004
+    "avgResponseTime": 14.356961664841196,
+    "p95Latency": 12.325525,
+    "throughput": 10.663138840954952,
+    "httpFailureRate": 0.2667031763417306,
+    "effectiveFailureRate": 0.0013522991487481331
   },
   "classification": {
-    "successRate": 0.9735894357743097,
-    "throttledRate": 0.003001200480192077,
-    "businessRejectRate": 0.0234093637454982,
+    "successRate": 0.7330043859649122,
+    "throttledRate": 0.2631578947368421,
+    "businessRejectRate": 0.0021929824561403508,
     "serverErrorRate": 0,
     "transportFailureRate": 0
   },
   "operations": [
     {
       "operation": "Auth login",
-      "requests": 48,
-      "throughput": 0.2740759988489082,
-      "avg": 80.78022500000002,
-      "p95": 86.290015
+      "requests": 2,
+      "throughput": 0.011679232027332915,
+      "avg": 264.64805,
+      "p95": 289.699415
     },
     {
       "operation": "Incidents list",
-      "requests": 701,
-      "throughput": 4.002651566522597,
-      "avg": 17.440236804564908,
-      "p95": 33.0895
+      "requests": 826,
+      "throughput": 4.823522827288494,
+      "avg": 5.29607639225182,
+      "p95": 12.1752
     },
     {
       "operation": "Checkpoints list",
-      "requests": 414,
-      "throughput": 2.3639054900718337,
-      "avg": 8.269755555555555,
-      "p95": 19.763844999999982
+      "requests": 465,
+      "throughput": 2.715421446354903,
+      "avg": 4.031931182795697,
+      "p95": 8.390639999999998
     },
     {
       "operation": "Report submit",
-      "requests": 263,
-      "throughput": 1.5017080770263096,
-      "avg": 1074.9098186311785,
-      "p95": 2101.72258
+      "requests": 262,
+      "throughput": 1.5299793955806118,
+      "avg": 65.58166755725195,
+      "p95": 327.5567199999997
     },
     {
       "operation": "Route estimate",
-      "requests": 240,
-      "throughput": 1.3703799942445412,
-      "avg": 103.71089416666668,
-      "p95": 769.57159
+      "requests": 269,
+      "throughput": 1.5708567076762772,
+      "avg": 7.978807434944238,
+      "p95": 6.9738199999999875
     }
   ]
 }

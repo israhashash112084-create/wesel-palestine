@@ -6,8 +6,15 @@ import { Counter, Rate, Trend } from 'k6/metrics';
 
 export const BASE_URL = __ENV.K6_BASE_URL || 'http://localhost:3000/api/v1';
 export const DEFAULT_PASSWORD = __ENV.K6_PASSWORD || 'Wesal@1234';
+//export const DEFAULT_PASSWORD = __ENV.K6_PASSWORD || '12345678';
+
+
 export const USER_POOL_SIZE = Number(__ENV.K6_USER_POOL_SIZE || 24);
 export const MODERATOR_POOL_SIZE = Number(__ENV.K6_MODERATOR_POOL_SIZE || USER_POOL_SIZE);
+//export const USER_POOL_SIZE = 1;
+//export const MODERATOR_POOL_SIZE = 1;
+
+
 
 const WEST_BANK_BOUNDS = {
   minLat: 31.2,
@@ -83,13 +90,26 @@ function buildUserEmails(count = USER_POOL_SIZE) {
     return `k6.load.user${suffix}@test.com`;
   });
 }
+/*
+function buildUserEmails(count = USER_POOL_SIZE) {
+  return Array.from({ length: count }, () => 'aseel@test.com');
+}*/
+
 
 function buildModeratorEmails(count = MODERATOR_POOL_SIZE) {
   return Array.from({ length: count }, (_, index) => {
     const suffix = String(index + 1).padStart(2, '0');
     return `k6.load.mod${suffix}@test.com`;
+    
   });
 }
+
+
+
+/*
+function buildModeratorEmails(count = MODERATOR_POOL_SIZE) {
+  return Array.from({ length: count }, () => 'aseel@test.com');
+}*/
 
 export function jsonHeaders(token) {
   return {
@@ -474,3 +494,64 @@ export function buildSummary(data, scenario, operationKeys) {
     [summaryPath]: JSON.stringify(report, null, 2),
   };
 }
+
+
+
+/*
+export function buildSummary(data, scenario, operationKeys) {
+  const httpFailureRate = Number(metricValues(data, 'http_req_failed').rate || 0);
+  const throttledRate = Number(metricValues(data, 'expected_throttle_rate').rate || 0);
+  const businessRejectRate = Number(metricValues(data, 'business_reject_rate').rate || 0);
+
+  const report = {
+    scenario,
+    generatedAt: new Date().toISOString(),
+    overall: {
+      avgResponseTime: Number(metricValues(data, 'http_req_duration').avg || 0),
+      p95Latency: Number(metricValues(data, 'http_req_duration')['p(95)'] || 0),
+      throughput: Number(metricValues(data, 'http_reqs').rate || 0),
+      httpFailureRate,
+      effectiveFailureRate: Math.max(0, httpFailureRate - throttledRate - businessRejectRate),
+    },
+    classification: {
+      successRate: Number(metricValues(data, 'success_rate').rate || 0),
+      throttledRate,
+      businessRejectRate,
+      serverErrorRate: Number(metricValues(data, 'server_error_rate').rate || 0),
+      transportFailureRate: Number(metricValues(data, 'transport_failure_rate').rate || 0),
+    },
+    operations: operationKeys.map((key) => buildOperationSummary(data, key)),
+  };
+
+  const summaryPath = __ENV.K6_SUMMARY_PATH || `k6-tests/${scenario}.summary.json`;
+  return {
+    stdout: textSummary(report),
+    [summaryPath]: JSON.stringify(report, null, 2),
+  };
+}
+
+function textSummary(report) {
+  const lines = [
+    '',
+    `k6 scenario: ${report.scenario}`,
+    `avg response time: ${formatMs(report.overall.avgResponseTime)}`,
+    `p95 latency: ${formatMs(report.overall.p95Latency)}`,
+    `throughput: ${report.overall.throughput.toFixed(2)} req/s`,
+    `http failure rate: ${formatRate(report.overall.httpFailureRate)}`,
+    `effective failure rate (excluding 409/429): ${formatRate(report.overall.effectiveFailureRate)}`,
+    `throttled rate (429): ${formatRate(report.classification.throttledRate)}`,
+    `business reject rate (409): ${formatRate(report.classification.businessRejectRate)}`,
+    `server error rate (5xx): ${formatRate(report.classification.serverErrorRate)}`,
+    `transport failure rate: ${formatRate(report.classification.transportFailureRate)}`,
+    '',
+    'operation breakdown:',
+  ];
+
+  for (const operation of report.operations) {
+    lines.push(
+      `- ${operation.operation}: count=${formatCount(operation.requests)}, rps=${operation.throughput.toFixed(2)}, avg=${formatMs(operation.avg)}, p95=${formatMs(operation.p95)}`
+    );
+  }
+
+  return `${lines.join('\n')}\n`;
+}*/

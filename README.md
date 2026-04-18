@@ -269,7 +269,9 @@ Upvotes   Upvotes
                              │ is_fallback           │
                              └──────────────────────┘
 ```
-
+<p align="center">
+  <img src="./prisma-erd.svg" alt="Wesel Palestine ERD" width="100%">
+</p>
 ### Supporting Tables
 
 | Table                       | Purpose                                      |
@@ -357,7 +359,7 @@ https://api.weselpalestine.com/api/v1/{resource}
 | **admin**     | All moderator capabilities + manage checkpoints                   |
 
 ### Route Estimation Algorithm
-
+/*
 ```
 1. Query OSRM for optimal route
 2. Check if route passes near checkpoints (1.5km radius)
@@ -372,6 +374,34 @@ https://api.weselpalestine.com/api/v1/{resource}
    • 10 min if incidents present
    • 60 min if route is clear
 ```
+*/
+
+```
+Route Estimation Flow
+1. Query OSRM for one or more candidate routes
+2. Validate route alternatives against selected checkpoint and area avoidance filters
+3. If a route still passes avoided checkpoints or areas, attempt waypoint-based detour logic (Plan B)
+4. If no valid detour is found, return the best available route with warning messages
+5. If OSRM fails, use Haversine fallback estimation
+6. Detect checkpoints and incidents near the route geometry
+7. Apply delay penalties for checkpoints, incidents, and weather:
+Checkpoint delay:
+- closed: +20 minutes
+- slow: +10 minutes
+Incident delay:
+- low: +5 minutes
+- medium: +10 minutes
+- high: +20 minutes
+- critical: +30 minutes
+Weather delay:
+- hazardous conditions: +10 minutes
+8. Cache the result:
+   • 10 minutes if affected by incidents
+   • 60 minutes if route is clear
+9. Track checkpoint dependencies for cache invalidation
+```
+
+
 
 ### Caching Strategy
 
@@ -383,6 +413,13 @@ https://api.weselpalestine.com/api/v1/{resource}
 | Single report                  | Redis             | 3 min  |
 | Checkpoint list                | Redis             | 5 min  |
 | User profile                   | Redis             | 15 min |
+
+
+Route cache is invalidated immediately when checkpoints are created, updated, or deleted, since checkpoint changes directly affect route feasibility and delay calculation.
+Incident-related routes rely on a shorter TTL-based cache refresh instead of immediate invalidation, providing a balance between performance and data freshness.
+
+Route cache stores previously computed route results along with related dependencies such as checkpoint IDs and affected areas.
+Checkpoint dependencies are tracked even if a checkpoint is currently open, ensuring that any future status changes can invalidate stale cached routes and maintain accuracy.
 
 ### Error Handling & Status Codes
 
@@ -867,7 +904,7 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 - `POST /auth/login` — Authenticate and receive tokens
 - `POST /auth/refresh` — Rotate access token using refresh token
 - `POST /auth/logout` — Revoke refresh token
-- `GET /auth/profile` — Get current user profile
+- `GET /auth/profile` — Get current authenticated user profile
 
 **Security Features**:
 
@@ -961,9 +998,10 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 **Key Endpoints**:
 
 - `POST /routes/estimate` — Calculate optimal route
-- `POST /routes/compare` — Compare multiple route options
-- `GET /routes/history` — Get user's route history
-- `GET /routes/history/stats` — Route statistics
+- `POST /routes/estimate/compare` — Compare multiple route options between the same origin and destination
+- `GET /routes/areas/status` — Get area risk summary
+- `GET /routes/checkpoints/active` — Get active checkpoints
+- `GET /routes/incidents/active` — Get active incidents
 - `GET /routes/areas-status` — Get area status summary
 - `GET /routes/active-checkpoints` — Active checkpoints on route
 - `GET /routes/active-incidents` — Active incidents on route
@@ -976,6 +1014,10 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 - Delay penalty application (checkpoints, incidents, weather)
 - Multi-tier caching (Redis + database)
 - Haversine fallback when OSRM unavailable
+- Checkpoint updates directly affect route estimation. Therefore, any change to checkpoint data (creation, update, deletion) triggers route cache invalidation to ensure accurate route results.
+This includes newly added checkpoints that were not previously part of cached routes.
+
+Incident updates do not trigger immediate route cache invalidation. Instead, routes affected by incidents are refreshed using shorter cache TTL values to balance system performance and data freshness.
 
 ### 6. Alerts (`/api/v1/alerts`)
 
@@ -1103,7 +1145,7 @@ npm run dev
 
 ### API Documentation (API-Dog)
 
-Comprehensive documentation for all endpoints is maintained in **API-Dog**, fulfilling the project deliverables. The API-Dog collection provides request/response schemas, error formats, and authentication flows.
+API documentation and comprehensive test cases are maintained in **API-Dog**, covering happy paths, validation errors, authentication, cache behavior, and fallback scenarios.
 
 **Delivery Package:**
 - **API-Dog Exported Collection**: An exported JSON file provided alongside the repository.
