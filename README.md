@@ -369,9 +369,16 @@ https://api.weselpalestine.com/api/v1/{resource}
 4. If no valid detour → Use best route with warning
 5. If OSRM fails → Haversine straight-line fallback
 6. Apply delay penalties:
-   • Checkpoint delay: +5-15 min based on status
-   • Incident delay: +3-10 min based on severity
-   • Weather delay: +10 min if hazardous
+ Checkpoint delay:
+      - closed: +20 minutes
+      - slow: +10 minutes
+ Incident delay:
+      - low: +5 minutes
+      - medium: +10 minutes
+      - high: +20 minutes
+      - critical: +30 minutes
+ Weather delay:
+      - hazardous conditions: +10 minutes
 7. Cache result:
    • 10 min if incidents present
    • 60 min if route is clear
@@ -625,7 +632,8 @@ Each endpoint tested with valid data to confirm correct responses:
 
 ### Key Performance Findings
 
-✅ **Scalability**: System handles 100 concurrent users with zero errors and sub-5ms p95 latency  
+✅ **Scalability**: The system handled spike traffic up to 100 concurrent virtual users without 5xx backend failures, while maintaining acceptable latency for the project scope.
+Observed error rates were expected domain-level responses such as rate limiting (429) and conflict detection (409), not system instability.
 ✅ **Rate Limiting**: Duplicate detection and rate limiting work correctly under load  
 ✅ **Redis Caching**: Read latency reduced significantly vs direct DB queries  
 ✅ **No Memory Leaks**: No degradation detected during 10-minute soak test  
@@ -904,7 +912,7 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 - `POST /auth/login` — Authenticate and receive tokens
 - `POST /auth/refresh` — Rotate access token using refresh token
 - `POST /auth/logout` — Revoke refresh token
-- `GET /auth/profile` — Get current user profile
+- `GET /auth/me` — Get current user profile
 
 **Security Features**:
 
@@ -998,12 +1006,12 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 **Key Endpoints**:
 
 - `POST /routes/estimate` — Calculate optimal route
-- `POST /routes/compare` — Compare multiple route options
+- `POST /routes/compare` — Compare multiple route options between the same origin and destination
 - `GET /routes/history` — Get user's route history
 - `GET /routes/history/stats` — Route statistics
-- `GET /routes/areas-status` — Get area status summary
-- `GET /routes/active-checkpoints` — Active checkpoints on route
-- `GET /routes/active-incidents` — Active incidents on route
+- `GET /routes/areas/status ` — Get area status summary
+- `GET /routes/checkpoints/active` — Active checkpoints on route
+- `GET /routes/incidents/active` — Active incidents on route
 
 **Route Calculation Features**:
 
