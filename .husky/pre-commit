@@ -6,7 +6,7 @@ invalid=""
 for filepath in $staged_files; do
   # Skip auto-generated migration files (timestamps + underscores are expected)
   case "$filepath" in
-    src/database/migrations/*) continue ;;
+    */migrations/*) continue ;;
   esac
 
   # Skip well-known uppercase markdown files (README.md, CHANGELOG.md, LICENSE, etc.)
@@ -44,4 +44,4 @@ fi
 # ──────────────────────────────────────────────────────────────────────────────
 
 npm run lint
-npx lint-staged
+npx lint-staged --no-stash

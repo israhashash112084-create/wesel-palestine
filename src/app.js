@@ -1,28 +1,20 @@
-const express = require('express');
-const helmet = require('helmet');
-const cors = require('cors');
-const errorHandler = require('./middleware/error');
-
-const roadRouter = require('./modules/road/routes');
-const reportsRouter = require('./modules/reports/routes');
-const routingRouter = require('./modules/routing/routes');
-const alertsRouter = require('./modules/alerts/routes');
+import express from 'express';
+import apiV1Router from '#routes/v1/index.routes.js';
+import { errorHandler } from '#shared/middlewares/error-handler.middleware.js';
+import cookieParser from 'cookie-parser';
 
 const app = express();
 
-app.use(helmet());
-app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 
 app.get('/', (req, res) => {
   res.json({ status: 'API Running' });
 });
 
-app.use('/api/v1/road', roadRouter);
-app.use('/api/v1/reports', reportsRouter);
-app.use('/api/v1/routes', routingRouter);
-app.use('/api/v1/alerts', alertsRouter);
+app.use('/api/v1', apiV1Router);
 
+// Global error handler (must be registered after all routes)
 app.use(errorHandler);
 
-module.exports = app;
+export default app;

@@ -1,0 +1,46 @@
+import { env } from '#config/env.js';
+import jwt from 'jsonwebtoken';
+import { ForbiddenError, UnauthorizedError } from '#shared/utils/errors.js';
+
+const _verifyToken = (req) => {
+  const authHeader = req.headers?.authorization ?? req.headers?.Authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+
+  try {
+    const token = authHeader.split(' ')[1];
+    return jwt.verify(token, env.JWT_ACCESS_SECRET);
+  } catch {
+    return null;
+  }
+};
+
+export const authenticate = (req, res, next) => {
+  const decoded = _verifyToken(req);
+  if (!decoded) throw new UnauthorizedError('No authentication token provided');
+  req.userInfo = decoded;
+  next();
+};
+
+export const optionalAuthenticate = (req, res, next) => {
+  const decoded = _verifyToken(req);
+  if (decoded) req.userInfo = decoded;
+  next();
+};
+
+/**
+ * Middleware factory that checks if the authenticated user has
+ * one of the permitted roles.
+ *
+ * Usage: authorize('admin', 'moderator')
+ *
+ * @param {...string} roles - Allowed roles.
+ */
+
+export const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.userInfo || !roles.includes(req.userInfo.role)) {
+      throw new ForbiddenError('Insufficient permissions');
+    }
+    next();
+  };
+};
