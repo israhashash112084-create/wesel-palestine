@@ -14,7 +14,7 @@ export const pool = new Pool({
   password: env.DB_PASSWORD,
   database: env.DB_NAME,
   ssl: env.DB_SSL ? { rejectUnauthorized: false } : false,
-  max: env.DB_POOL_MAX,
+  max: env.DB_POOL_MAX_SIZE,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
@@ -25,6 +25,8 @@ pool.on('error', (err) => {
 });
 
 export const query = (text, params) => pool.query(text, params);
+
+export const prismaTransaction = (callback) => prisma.$transaction(callback);
 
 export const transaction = async (callback) => {
   const client = await pool.connect();
