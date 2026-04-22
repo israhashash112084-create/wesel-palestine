@@ -5,7 +5,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7-red.svg)](https://redis.io/)
 [![Prisma](https://img.shields.io/badge/Prisma-5.x-darkgreen.svg)](https://www.prisma.io/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Course Project](https://img.shields.io/badge/Course-Project-orange.svg)
 
 A comprehensive **real-time traffic and checkpoint monitoring REST API** designed to help users navigate the West Bank safely. The platform provides real-time checkpoint status updates, incident reporting, intelligent route estimation with hazard avoidance, community-driven moderation, and location-based alert subscriptions.
 
@@ -27,7 +27,8 @@ A comprehensive **real-time traffic and checkpoint monitoring REST API** designe
 - [Security Features](#security-features)
 - [Deployment](#deployment)
 - [Contributing](#contributing)
-- [License](#license)
+- [Team](#team)
+- [Project Status](#project-status)
 
 ---
 
@@ -76,7 +77,8 @@ Navigation in the West Bank is challenging due to unpredictable checkpoint statu
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │              Middleware Stack                        │   │
-│  │  CORS → Helmet → Rate Limit → Auth → Validation    │   │
+│  │  JSON Parser → Cookie Parser → Rate Limit          │   │
+│  │  → Auth → Validation                               │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌─────────┐ ┌───────────┐ ┌─────────┐ ┌────────────────┐ │
@@ -116,16 +118,16 @@ Navigation in the West Bank is challenging due to unpredictable checkpoint statu
 Client Request (HTTPS)
     ↓
 ┌─────────────────────┐
-│  CORS Middleware    │
+│  JSON Parser        │
 └────────┬────────────┘
          ↓
 ┌─────────────────────┐
-│  Helmet (Security)  │
+│  Cookie Parser      │
 └────────┬────────────┘
          ↓
 ┌─────────────────────┐
 │  Rate Limiter       │
-│  (100 req/15min)    │
+│  (per-route rules)  │
 └────────┬────────────┘
          ↓
 ┌─────────────────────┐
@@ -432,8 +434,8 @@ Our testing strategy follows a **multi-layered approach** covering functional co
 │        │   Tests     │  & Scalability│
 │        └─────────────┘              │
 │       ┌───────────────┐             │
-│       │  API-Dog Tests │  Integration│
-│       │  (Happy + Error)│  & E2E    │
+│       │ OpenAPI +      │  Integration│
+│       │ Manual Tests   │  & E2E     │
 │       └───────────────┘             │
 │      ┌─────────────────┐            │
 │      │   Manual Testing │  Exploratory│
@@ -449,22 +451,14 @@ Our testing strategy follows a **multi-layered approach** covering functional co
 - **Database**: Fresh PostgreSQL instance with seed data
 - **Cache**: Redis instance (cleared before each test run)
 
-### ✅ Functional Tests (API-Dog)
+### ✅ Functional Tests
 
-#### Automated Test Execution Overview
-The API is thoroughly validated using Apidog. Below is the latest automated integration test execution report demonstrating the test coverage across our API:
+Functional verification in the final submission is based on the exported API collection shipped with the repository and manual endpoint execution during development.
 
-- **Execution Date**: 2026-04-17 17:15:20
-- **Execution Tool**: Apidog v2.8.23
-- **Duration**: 1m 42.94s
-- **Pass Rate**: 96.48% Passed (3.52% Failed)
-- **Average Request Time**: ~200ms *
-- **Total Requests**: 369 Executed (13 Failed)
-- **Total Assertions**: 583 Executed (19 Failed)
+**Documentation artifact included in the repo**:
 
-> **Note**: Minor test failures typically account for intentional security checkpoints like `429 Rate Limiter` triggers and `409 Duplicate Reports` conflict validations during the heavy integration flow.
-> 
-> *\* The 200ms average latency reflects un-cached, cold-start integration paths triggered sequentially by Apidog's runner. For our pure high-throughput backend speeds (e.g., `<20ms` cached endpoints), please see the **Performance Testing Results** using k6 below.*
+- `wesel-palestine-api-collection.json` — exported OpenAPI collection covering the main endpoints
+- `k6-tests/` — load-testing scripts for read-heavy, write-heavy, mixed, spike, and soak scenarios
 
 #### Happy Path Tests
 
@@ -488,6 +482,7 @@ Each endpoint tested with valid data to confirm correct responses:
 | **403 Forbidden**    | Regular user accessing moderator endpoints   | "Forbidden" error        |
 | **404 Not Found**    | Non-existent resource ID (e.g., id=99999)    | "Resource not found"     |
 | **409 Conflict**     | Submitting duplicate report in same area     | "Duplicate report" error |
+| **429 Too Many Requests** | Exceeding route or write limits         | Rate limit error message |
 
 #### 🔐 Auth Flow Tests
 
@@ -507,7 +502,7 @@ Each endpoint tested with valid data to confirm correct responses:
 6. POST /reports/:id/moderate → Moderate report (moderator)
 7. POST /routes/estimate      → Estimate route
 8. POST /alerts/subscriptions → Create alert subscription
-9. GET /alerts/alerts         → Get my alerts
+9. GET /alerts                → Get my alerts
 ```
 
 ### Code Quality Tools
@@ -525,12 +520,11 @@ Each endpoint tested with valid data to confirm correct responses:
 
 ### Testing Setup
 
-- **Tool**: Grafana k6 v1.7.1
-- **Environment**: Local development machine (Node.js 22, PostgreSQL 16 with PostGIS extension, Redis 7)
-- **Test Scripts**: Located in `/k6-tests` (5 scenarios, fully documented with bottleneck analysis)
-- **Database**: PostgreSQL 16 with PostGIS extension and composite indexes on location, status, type, created_at
-- **Cache**: Redis 7 with BullMQ job queue (5 workers per job type)
-- **OSRM**: Running locally via Docker (removed network latency)
+- **Tool**: Grafana k6
+- **Environment**: Node.js 22, PostgreSQL 16, Redis 7, and the final application code in this repository
+- **Test Scripts**: Located in `/k6-tests`
+- **Artifacts Included**: `mixed.summary.json` plus the k6 scenario scripts
+- **Focus Areas**: read-heavy flows, write-heavy flows, mixed traffic, spike behavior, and soak stability
 
 ### Test Scenarios
 
@@ -544,26 +538,19 @@ Each endpoint tested with valid data to confirm correct responses:
 
 ### Results Summary
 
-> Note: The results below reflect the final authenticated load test runs post-optimizations (see full log contexts).
+The repository contains performance test scripts for the five required traffic patterns. These scripts were used to validate:
 
-| Test Scenario       | Avg Response | p95 Latency | Throughput  | Error Rate | Result    |
-| ------------------- | ------------ | ----------- | ----------- | ---------- | --------- |
-| **Read-Heavy**      | 12.45 ms     | 35.21 ms    | 28.91 req/s | ~0.00%     | ✅ PASS   |
-| **Write-Heavy**     | 48.73 ms     | 125.67 ms   | 18.42 req/s | ~0.15%\*   | ✅ PASS\* |
-| **Mixed**           | 28.91 ms     | 89.34 ms    | 32.56 req/s | ~0.32%\*   | ✅ PASS\* |
-| **Spike (100 VUs)** | 35.67 ms     | 102.45 ms   | 25.78 req/s | ~0.48%\*   | ✅ PASS\* |
-| **Soak (10 min)**   | 8.92 ms      | 18.76 ms    | 9.84 req/s  | 0.00%      | ✅ PASS   |
-
-> **\*Note:** Error rates in write, mixed, and spike tests are **minimal** domain logic behaviors under substantial load. They are comprised primarily of expected rate limit outcomes (`429`) and acceptable conflict/duplicate detection outcomes (`409`). The underlying backend instability (`server_error_rate` 5xx) remains 0% across all scenarios.
+- cached reads stay significantly faster than external-API-backed route estimation
+- write-heavy flows trigger the intended protections such as duplicate detection and rate limiting
+- background workers prevent report, incident, checkpoint, and alert processing from blocking the main request cycle
+- the system remains stable during spike and soak style workloads appropriate to the project scope
 
 ### Key Performance Findings
 
-✅ **Scalability**: The system handled spike traffic up to 100 concurrent virtual users without 5xx backend failures, while maintaining acceptable latency for the project scope.
-Observed error rates were expected domain-level responses such as rate limiting (429) and conflict detection (409), not system instability.
-✅ **Rate Limiting**: Duplicate detection and rate limiting work correctly under load  
-✅ **Redis Caching**: Read latency reduced significantly vs direct DB queries  
-✅ **No Memory Leaks**: No degradation detected during 10-minute soak test  
-✅ **Job Queue Efficiency**: BullMQ workers process jobs with <300ms avg time
+- **Route estimation** is the heaviest workflow because it combines DB reads, OSRM calls, optional weather checks, and route-shape analysis
+- **Cached responses** are much faster than cold route calculations
+- **Write-heavy scenarios** correctly surface domain-level protections such as `409` conflicts and `429` rate limits
+- **BullMQ workers** reduce blocking on long-running asynchronous tasks
 
 ---
 
@@ -587,8 +574,7 @@ Observed error rates were expected domain-level responses such as rate limiting 
 - ✅ Parallel DB queries (Promise.all for checkpoints + incidents)
 - ✅ Haversine fallback when OSRM unavailable (50ms vs 1500ms)
 - ✅ Detour calculation only triggered when primary route blocked
-- ✅ Local OSRM Deployment: Running OSRM locally via Docker to entirely eliminate network latency
-- ✅ Pre-emptive Caching: Background cron jobs routinely warm up cache for frequent routes between major cities
+- ✅ Configurable OSRM endpoint via `OSRM_BASE_URL`
 
 **Before/After Comparison:**
 
@@ -601,7 +587,7 @@ Observed error rates were expected domain-level responses such as rate limiting 
 
 **Remaining Limitations:**
 
-- Weather API call is sequential (could be parallelized in future)
+- Weather API calls add extra latency when the weather factor is enabled
 
 ---
 
@@ -618,19 +604,10 @@ Observed error rates were expected domain-level responses such as rate limiting 
 
 **Optimizations Applied:**
 
-- ✅ PostGIS Integration: Migrated to GEOGRAPHY types with GiST indexing for O(1) geospatial lookups
-- ✅ Async Deduplication: Immediately return 202 Accepted and process deduplication fully in downstream workers
+- ✅ Numeric latitude/longitude indexing in PostgreSQL
 - ✅ Composite index: `idx_reports_checkpoint_status_dedup` for faster status checks
 - ✅ Redis-based rate limiting (faster than in-memory for distributed systems)
-- ✅ BullMQ concurrency set to 5 workers per job type (parallel processing)
-
-**Before/After Comparison:**
-
-| Scenario                         | Before Optimization          | After Optimization   | Improvement        |
-| -------------------------------- | ---------------------------- | -------------------- | ------------------ |
-| Duplicate detection query        | ~200-400ms (full table scan) | ~2ms (PostGIS)       | **99% faster**     |
-| Report submission                | ~1142-1200ms (sync writes)   | ~15ms (async queues) | **98% faster**     |
-| Rate limiting check              | N/A (no rate limiter)        | ~2-5ms (Redis)       | **New protection** |
+- ✅ Worker concurrency where appropriate for report and alerts processing
 
 **Remaining Limitations:**
 
@@ -652,9 +629,9 @@ Observed error rates were expected domain-level responses such as rate limiting 
 
 **Optimizations Applied:**
 
-- ✅ Connection pooling configured (`DB_POOL_MAX=10`)
+- ✅ Connection pooling configured in the Node.js database layer
 - ✅ Read queries use pagination (limit 10-20 results)
-- ✅ Redis connection reuse (single ioredis client for cache + BullMQ)
+- ✅ Redis connection reuse through the `redis` client package
 - ✅ Async job processing offloads heavy writes from main request flow
 
 **Error Rate Breakdown:**
@@ -703,10 +680,10 @@ Observed error rates were expected domain-level responses such as rate limiting 
 
 | Scenario                         | Response Time | Cache Status | External API Calls | DB Queries                       |
 | -------------------------------- | ------------- | ------------ | ------------------ | -------------------------------- |
-| **Cache hit** (cached route)     | ~2–5ms        | ✅ Hit       | 0                  | 0                                |
-| **Cache miss, no incidents**     | ~10–20ms      | ❌ Miss      | 1 (Local OSRM)     | 2 (checkpoints + incidents)      |
-| **Cache miss, with detour**      | ~30–50ms      | ❌ Miss      | 2-3 (Local OSRM)   | 4-6 (multiple checkpoint checks) |
-| **OSRM unavailable** (Haversine) | ~50ms         | ❌ Miss      | 0                  | 2 (checkpoints + incidents)      |
+| **Cache hit** (cached route)     | Low           | ✅ Hit       | 0                  | 0                                |
+| **Cache miss, no incidents**     | Highest among common reads | ❌ Miss | 1 OSRM call        | 2 (checkpoints + incidents)      |
+| **Cache miss, with detour**      | Higher than standard estimate | ❌ Miss | 2-3 OSRM calls     | 4-6 (multiple checkpoint checks) |
+| **OSRM unavailable** (Haversine) | Moderate      | ❌ Miss      | 0                  | 2 (checkpoints + incidents)      |
 
 **Cache Hit Rate Impact:**
 
@@ -724,13 +701,13 @@ All queries optimized with composite indexes:
 -- Fast report filtering and deduplication
 CREATE INDEX idx_reports_status ON reports(status);
 CREATE INDEX idx_reports_type ON reports(type);
-CREATE INDEX idx_reports_location ON reports USING GIST(geog_location);
+CREATE INDEX idx_reports_location ON reports(location_lat, location_lng);
 CREATE INDEX idx_reports_created_at ON reports(created_at DESC);
 CREATE INDEX idx_reports_checkpoint_status_dedup
   ON reports(type, checkpoint_id, proposed_checkpoint_status, status, created_at);
 
 -- Location-based checkpoint queries
-CREATE INDEX idx_checkpoints_location ON checkpoints USING GIST(geog_location);
+CREATE INDEX idx_checkpoints_location ON checkpoints(latitude, longitude);
 CREATE INDEX idx_checkpoints_city ON checkpoints(city);
 CREATE INDEX idx_checkpoints_area ON checkpoints(area);
 
@@ -811,17 +788,17 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 | **Framework**        | Express.js 5.x             | HTTP server & routing        |
 | **Database**         | PostgreSQL 16              | Relational data storage      |
 | **ORM**              | Prisma 5.x                 | Type-safe database access    |
-| **Cache**            | Redis 7 (ioredis)          | In-memory caching            |
+| **Cache**            | Redis 7 (`redis`)          | In-memory caching            |
 | **Job Queue**        | BullMQ 5.x                 | Async background processing  |
 | **Routing Engine**   | OSRM                       | Road-based route calculation |
 | **Weather API**      | OpenWeatherMap             | Weather condition data       |
 | **Geocoding API**    | Nominatim (OSM)            | Forward/Reverse geocoding    |
 | **Validation**       | Joi                        | Request schema validation    |
 | **Authentication**   | JWT (Access + Refresh)     | Stateless auth tokens        |
-| **Security**         | Helmet, CORS, Rate Limiter | HTTP security headers        |
+| **Security**         | Cookie-based refresh flow, JWT, Rate Limiter | Auth and request protection  |
 | **Logging**          | Winston + Daily Rotate     | Structured logging           |
 | **Code Quality**     | ESLint, Prettier, Husky    | Linting & formatting         |
-| **Testing**          | API-Dog, k6, Jest          | API & load testing           |
+| **Testing**          | OpenAPI collection, k6, manual verification | API and load testing         |
 | **Containerization** | Docker Compose             | Local dev environment        |
 
 ---
@@ -859,8 +836,9 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 - `GET /checkpoints/:id` — Get checkpoint details with status history
 - `GET /checkpoints/nearby` — Find checkpoints within radius
 - `PATCH /checkpoints/:id` — Update checkpoint (admin only)
+- `PATCH /checkpoints/:id/status` — Update checkpoint traffic status (admin only)
+- `GET /checkpoints/:id/status-history` — View status changes (moderator/admin)
 - `DELETE /checkpoints/:id` — Delete checkpoint (admin only)
-- `GET /checkpoints/:id/status-history` — View status changes
 
 **Features**:
 
@@ -881,7 +859,8 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 - `GET /incidents/nearby` — Find incidents within radius
 - `PATCH /incidents/:id/close` — Close incident (moderator+)
 - `PATCH /incidents/:id` — Update incident (moderator+)
-- `GET /incidents/:id/status-history` — View status changes
+- `GET /incidents/:id/reports` — View reports linked to an incident
+- `GET /incidents/:id/history` — View incident history
 
 **Features**:
 
@@ -932,10 +911,12 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 **Key Endpoints**:
 
 - `POST /routes/estimate` — Calculate optimal route
-- `POST /routes/compare` — Compare multiple route options between the same origin and destination
+- `POST /routes/estimate/compare` — Compare multiple route options between the same origin and destination
 - `GET /routes/history` — Get user's route history
+- `GET /routes/history/:id` — Get one route history item
+- `DELETE /routes/history/:id` — Delete one route history item
 - `GET /routes/history/stats` — Route statistics
-- `GET /routes/areas/status ` — Get area status summary
+- `GET /routes/areas/status` — Get area status summary
 - `GET /routes/checkpoints/active` — Active checkpoints on route
 - `GET /routes/incidents/active` — Active incidents on route
 
@@ -958,7 +939,7 @@ Our stack was carefully selected to meet the specific requirements of a high-per
 - `GET /alerts/subscriptions` — Get user's subscriptions
 - `PATCH /alerts/subscriptions/:id` — Update subscription
 - `PATCH /alerts/subscriptions/:id/deactivate` — Deactivate subscription
-- `GET /alerts/alerts` — Get user's alerts
+- `GET /alerts` — Get user's alerts
 - `PATCH /alerts/:id/read` — Mark alert as read
 
 **Alert Matching Logic**:
@@ -1072,14 +1053,14 @@ npm run dev
 | `npm run lint:fix`       | Auto-fix linting errors                  |
 | `npm run format`         | Format code with Prettier                |
 
-### API Documentation (API-Dog)
+### API Documentation (OpenAPI Export)
 
-Comprehensive documentation for all endpoints is maintained in **API-Dog**, fulfilling the project deliverables. The API-Dog collection provides request/response schemas, error formats, and authentication flows.
+The repository includes an exported OpenAPI collection covering the documented endpoints and request/response structures.
 
 **Delivery Package:**
 
-- **API-Dog Exported Collection**: An exported JSON file provided alongside the repository.
-- **Environment Context**: Features pre-configured environments addressing local variables.
+- **OpenAPI Export**: `wesel-palestine-api-collection.json`
+- **Load Tests**: `k6-tests/`
 
 Once the server is running locally, access the APIs at:
 
@@ -1102,10 +1083,17 @@ Create a `.env` file in the root directory with the following variables:
 
 ### Database Configuration
 
-| Variable       | Example                                  | Description                       |
-| -------------- | ---------------------------------------- | --------------------------------- |
-| `DATABASE_URL` | `postgres://user:pass@localhost:5432/db` | Prisma connection string          |
-| `DIRECT_URL`   | `postgres://user:pass@localhost:5432/db` | Direct DB connection (migrations) |
+| Variable           | Example                                  | Description                                 |
+| ------------------ | ---------------------------------------- | ------------------------------------------- |
+| `DB_HOST`          | `localhost`                              | PostgreSQL host used by the app             |
+| `DB_PORT`          | `5432`                                   | PostgreSQL port used by the app             |
+| `DB_USER`          | `postgres`                               | PostgreSQL user                             |
+| `DB_PASSWORD`      | `your_db_password_here`                  | PostgreSQL password                         |
+| `DB_NAME`          | `wasel_db`                               | PostgreSQL database name                    |
+| `DB_SSL`           | `false`                                  | Enable SSL for PostgreSQL connection        |
+| `DB_POOL_MAX_SIZE` | `10`                                     | App-level PostgreSQL pool size              |
+| `DATABASE_URL`     | `postgres://user:pass@localhost:5432/db` | Prisma connection string                    |
+| `DIRECT_URL`       | `postgres://user:pass@localhost:5432/db` | Direct DB connection for Prisma migrations  |
 
 ### JWT Configuration
 
@@ -1147,12 +1135,6 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 | `ROUTE_LIMIT_WINDOW_MS`    | `60000`  | Route limit window (1 min)    |
 | `ROUTE_LIMIT_MAX_REQUESTS` | `10`     | Max route requests per window |
 
-### CORS (Production Only)
-
-| Variable          | Example                     | Description                     |
-| ----------------- | --------------------------- | ------------------------------- |
-| `ALLOWED_ORIGINS` | `https://your-frontend.com` | Comma-separated allowed origins |
-
 ### Logging
 
 | Variable    | Default | Description                           |
@@ -1170,8 +1152,6 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 | **Password Hashing**         | bcrypt with salt                 | Secure password storage                    |
 | **JWT Authentication**       | Dual-token (access + refresh)    | Stateless, secure auth                     |
 | **Token Hashing**            | Refresh tokens hashed in DB      | Prevent token theft                        |
-| **Helmet**                   | HTTP security headers            | Prevent XSS, clickjacking, etc.            |
-| **CORS**                     | Configurable allowed origins     | Prevent unauthorized cross-origin requests |
 | **Rate Limiting**            | Redis-backed rate limiter        | Prevent abuse & DDoS                       |
 | **Input Validation**         | Joi schema validation            | Prevent injection attacks                  |
 | **SQL Injection Protection** | Prisma ORM parameterized queries | Prevent SQL injection                      |
@@ -1183,7 +1163,6 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ✅ **Never commit `.env` file** — Listed in `.gitignore`  
 ✅ **Rotate JWT secrets regularly** — Use strong random strings  
 ✅ **Use HTTPS in production** — Encrypt all traffic  
-✅ **Enable CORS restrictively** — Only allow known origins  
 ✅ **Monitor rate limits** — Log 429 responses for abuse detection  
 ✅ **Keep dependencies updated** — Regular `npm audit` checks
 
@@ -1194,7 +1173,6 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ### Production Checklist
 
 - [ ] Set `NODE_ENV=production`
-- [ ] Configure `ALLOWED_ORIGINS` with frontend URL
 - [ ] Use strong JWT secrets (64+ characters)
 - [ ] Enable SSL/TLS (HTTPS)
 - [ ] Set up PostgreSQL connection pooling (pgBouncer)
@@ -1206,18 +1184,20 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 - [ ] Run `npm run lint` and fix all issues
 - [ ] Run performance tests with production data
 
-### Docker Deployment
+### Dockerized Dependencies
 
 ```bash
-# Build and start production containers
-docker-compose -f docker-compose.yml up -d
+# Start PostgreSQL and Redis containers used by the API
+docker-compose up -d
 
-# View logs
-docker-compose logs -f
+# Run the API from the host machine
+npm run dev
 
-# Stop services
+# Stop containers when finished
 docker-compose down
 ```
+
+The final repository includes `docker-compose.yml` for PostgreSQL and Redis. It does not include a production `Dockerfile` for the API server in this submitted version.
 
 ### Environment-Specific Configs
 
@@ -1286,28 +1266,24 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ---
 
-## 📄 License <a id="license"></a>
-
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
-
----
-
 ## 👥 Team
 
 **Wesel Palestine** is developed as part of an Advanced Software Engineering project.
 
 **Development Team**:
 
-- Backend API & Architecture
-- Database Design & Optimization
-- External API Integrations
-- Testing & Performance Optimization
+- **Majd Awwad**
+- **Israa Hashash**
+- **Aseel Dwikat**
+- **Rama Asayra**
 
 ---
 
 ## 📊 Project Status
 
-**Status**: ✅ Active Development
+**Status**: ✅ Final submission version
+
+**Code Freeze**: April 25, 2026
 
 **Current Version**: v1.0.0
 
